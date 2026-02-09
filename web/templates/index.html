@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>Sherwood Adventure Timer</title>
+    <link rel="apple-touch-icon" href="/static/../apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="/static/../favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/static/../favicon-16x16.png">
+    <link rel="manifest" href="/static/../site.webmanifest">
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+
+    <div id="app">
+
+        <!-- HEADER: Timer + Score Totals (visible during game) -->
+        <header id="game-header" class="hidden">
+            <div id="header-green">
+                <span class="header-team-name" id="header-green-name">Green</span>
+                <span class="header-team-score" id="header-green-total">0</span>
+            </div>
+            <div id="timer-display">0:00</div>
+            <div id="header-yellow">
+                <span class="header-team-name" id="header-yellow-name">Yellow</span>
+                <span class="header-team-score" id="header-yellow-total">0</span>
+            </div>
+        </header>
+
+        <!-- SCORING VIEW (shown when game is playing) -->
+        <main id="scoring-view" class="hidden">
+
+            <!-- Score Up Buttons -->
+            <div class="score-section">
+                <div class="section-label">Score Up</div>
+                <div class="score-grid">
+                    <button class="score-btn green-btn" data-action="GHU">
+                        <span class="btn-label">Hit</span>
+                        <span class="btn-icon">+</span>
+                        <span class="btn-value" id="green-hit-val">0</span>
+                    </button>
+                    <button class="score-btn yellow-btn" data-action="YHU">
+                        <span class="btn-label">Hit</span>
+                        <span class="btn-icon">+</span>
+                        <span class="btn-value" id="yellow-hit-val">0</span>
+                    </button>
+
+                    <button class="score-btn green-btn spot-btn" data-action="GSU">
+                        <span class="btn-label">Spot</span>
+                        <span class="btn-icon">+</span>
+                        <span class="btn-value" id="green-spot-val">0</span>
+                    </button>
+                    <button class="score-btn yellow-btn spot-btn" data-action="YSU">
+                        <span class="btn-label">Spot</span>
+                        <span class="btn-icon">+</span>
+                        <span class="btn-value" id="yellow-spot-val">0</span>
+                    </button>
+
+                    <button class="score-btn green-btn catch-btn" data-action="GCU">
+                        <span class="btn-label">Catch</span>
+                        <span class="btn-icon">+</span>
+                        <span class="btn-value" id="green-catch-val">0</span>
+                    </button>
+                    <button class="score-btn yellow-btn catch-btn" data-action="YCU">
+                        <span class="btn-label">Catch</span>
+                        <span class="btn-icon">+</span>
+                        <span class="btn-value" id="yellow-catch-val">0</span>
+                    </button>
+
+                    <button class="score-btn green-btn penalty-btn" data-action="GPU">
+                        <span class="btn-label">Penalty</span>
+                        <span class="btn-icon">+</span>
+                        <span class="btn-value" id="green-penalty-val">0</span>
+                    </button>
+                    <button class="score-btn yellow-btn penalty-btn" data-action="YPU">
+                        <span class="btn-label">Penalty</span>
+                        <span class="btn-icon">+</span>
+                        <span class="btn-value" id="yellow-penalty-val">0</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Score Down Buttons (corrections) -->
+            <div class="score-section corrections">
+                <div class="section-label">Corrections</div>
+                <div class="score-grid">
+                    <button class="score-btn green-btn down-btn" data-action="GHD">
+                        <span class="btn-label">Hit</span>
+                        <span class="btn-icon">&minus;</span>
+                    </button>
+                    <button class="score-btn yellow-btn down-btn" data-action="YHD">
+                        <span class="btn-label">Hit</span>
+                        <span class="btn-icon">&minus;</span>
+                    </button>
+
+                    <button class="score-btn green-btn down-btn spot-btn" data-action="GSD">
+                        <span class="btn-label">Spot</span>
+                        <span class="btn-icon">&minus;</span>
+                    </button>
+                    <button class="score-btn yellow-btn down-btn spot-btn" data-action="YSD">
+                        <span class="btn-label">Spot</span>
+                        <span class="btn-icon">&minus;</span>
+                    </button>
+
+                    <button class="score-btn green-btn down-btn catch-btn" data-action="GCD">
+                        <span class="btn-label">Catch</span>
+                        <span class="btn-icon">&minus;</span>
+                    </button>
+                    <button class="score-btn yellow-btn down-btn catch-btn" data-action="YCD">
+                        <span class="btn-label">Catch</span>
+                        <span class="btn-icon">&minus;</span>
+                    </button>
+
+                    <button class="score-btn green-btn down-btn penalty-btn" data-action="GPD">
+                        <span class="btn-label">Penalty</span>
+                        <span class="btn-icon">&minus;</span>
+                    </button>
+                    <button class="score-btn yellow-btn down-btn penalty-btn" data-action="YPD">
+                        <span class="btn-label">Penalty</span>
+                        <span class="btn-icon">&minus;</span>
+                    </button>
+                </div>
+            </div>
+
+        </main>
+
+        <!-- WAITING VIEW (shown during countdown / transitions) -->
+        <main id="waiting-view" class="hidden">
+            <div class="waiting-content">
+                <div class="waiting-icon">&#9201;</div>
+                <div class="waiting-text" id="waiting-message">Getting Ready...</div>
+            </div>
+        </main>
+
+        <!-- MANAGEMENT VIEW (shown when no game is running) -->
+        <main id="management-view">
+            <div id="next-game-info">
+                <h2>Next Game</h2>
+                <div class="team-preview">
+                    <div class="team-preview-card green-card">
+                        <span class="team-label">Green</span>
+                        <span class="team-name" id="next-green-name">---</span>
+                    </div>
+                    <div class="team-preview-card yellow-card">
+                        <span class="team-label">Yellow</span>
+                        <span class="team-name" id="next-yellow-name">---</span>
+                    </div>
+                </div>
+            </div>
+
+            <div id="control-grid">
+                <button class="ctrl-btn" data-action="GT">
+                    <span class="ctrl-label">Game Type</span>
+                    <span class="ctrl-value" id="game-type-val">Elimination</span>
+                </button>
+                <button class="ctrl-btn" data-action="AI">
+                    <span class="ctrl-label">Auto Instructions</span>
+                    <span class="ctrl-value" id="auto-inst-val">OFF</span>
+                </button>
+                <button class="ctrl-btn" data-action="TT">
+                    <span class="ctrl-label">Tourn Integration</span>
+                    <span class="ctrl-value" id="api-int-val">OFF</span>
+                </button>
+                <button class="ctrl-btn" data-action="RD">
+                    <span class="ctrl-label">Refresh Data</span>
+                    <span class="ctrl-value">Challonge</span>
+                </button>
+                <button class="ctrl-btn wide-btn" data-action="NG">
+                    <span class="ctrl-label">Next Game</span>
+                </button>
+                <button class="ctrl-btn wide-btn" data-action="FG">
+                    <span class="ctrl-label">First Game</span>
+                </button>
+                <button class="ctrl-btn" data-action="TM">
+                    <span class="ctrl-label">Music</span>
+                    <span class="ctrl-value" id="music-val">ON</span>
+                </button>
+                <button class="ctrl-btn" data-action="MV">
+                    <span class="ctrl-label">Volume</span>
+                    <span class="ctrl-value" id="vol-val">25</span>
+                </button>
+            </div>
+        </main>
+
+        <!-- Connection status -->
+        <div id="connection-status">Connected</div>
+
+    </div>
+
+    <script src="/static/js/socket.io.min.js"></script>
+    <script src="/static/js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,411 @@
+/* ==========================================
+   Sherwood Adventure Timer - Web Controller
+   Mobile-first responsive design for referee use
+   ========================================== */
+
+/* Reset & Base */
+*, *::before, *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+html {
+    font-size: 16px;
+    height: 100%;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #0f0f23;
+    color: #ffffff;
+    min-height: 100%;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+    overflow-x: hidden;
+}
+
+#app {
+    max-width: 600px;
+    margin: 0 auto;
+    padding-bottom: 40px;
+}
+
+/* ==========================================
+   Utility: Show/Hide
+   ========================================== */
+.hidden {
+    display: none !important;
+}
+
+/* ==========================================
+   HEADER: Timer + Score Summary
+   ========================================== */
+#game-header {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #1a1a3e;
+    padding: 8px 12px;
+    border-bottom: 2px solid #333;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.5);
+}
+
+#header-green, #header-yellow {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-width: 80px;
+}
+
+.header-team-name {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    opacity: 0.8;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100px;
+}
+
+.header-team-score {
+    font-size: 2.5rem;
+    font-weight: 900;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+}
+
+#header-green .header-team-score {
+    color: #4ade80;
+}
+
+#header-yellow .header-team-score {
+    color: #fbbf24;
+}
+
+#timer-display {
+    font-size: 3rem;
+    font-weight: 900;
+    font-variant-numeric: tabular-nums;
+    text-align: center;
+    line-height: 1;
+    padding: 0 8px;
+}
+
+#timer-display.overtime {
+    color: #ef4444;
+    animation: pulse-red 1s ease-in-out infinite;
+}
+
+#timer-display.paused {
+    color: #f59e0b;
+    animation: blink 1s step-end infinite;
+}
+
+@keyframes pulse-red {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+@keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+}
+
+/* ==========================================
+   SCORING VIEW
+   ========================================== */
+#scoring-view {
+    padding: 8px;
+}
+
+.score-section {
+    margin-bottom: 12px;
+}
+
+.section-label {
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: #888;
+    margin-bottom: 6px;
+    padding-left: 4px;
+}
+
+.score-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+}
+
+/* Score Buttons */
+.score-btn {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 14px;
+    border: none;
+    border-radius: 12px;
+    cursor: pointer;
+    font-size: 1.2rem;
+    font-weight: 700;
+    min-height: 70px;
+    transition: transform 0.1s ease, opacity 0.1s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.score-btn:active {
+    transform: scale(0.95);
+}
+
+.score-btn.cooldown {
+    opacity: 0.5;
+    pointer-events: none;
+}
+
+/* Flash animation on successful score */
+.score-btn.flash {
+    animation: btn-flash 0.3s ease-out;
+}
+
+@keyframes btn-flash {
+    0% { filter: brightness(1.5); }
+    100% { filter: brightness(1); }
+}
+
+.btn-label {
+    font-size: 1.1rem;
+}
+
+.btn-icon {
+    font-size: 1.8rem;
+    font-weight: 900;
+    opacity: 0.9;
+}
+
+.btn-value {
+    position: absolute;
+    top: 4px;
+    right: 8px;
+    font-size: 0.75rem;
+    opacity: 0.7;
+}
+
+/* Green team buttons */
+.green-btn {
+    background: #15803d;
+    color: #ffffff;
+}
+
+.green-btn:active {
+    background: #16a34a;
+}
+
+/* Yellow team buttons */
+.yellow-btn {
+    background: #ca8a04;
+    color: #000000;
+}
+
+.yellow-btn:active {
+    background: #eab308;
+}
+
+/* Down / Correction buttons */
+.down-btn {
+    min-height: 48px;
+    padding: 10px 14px;
+    opacity: 0.75;
+    font-size: 1rem;
+}
+
+.down-btn .btn-icon {
+    font-size: 1.4rem;
+}
+
+/* Corrections section is collapsible-looking, muted */
+.corrections {
+    padding-top: 4px;
+    border-top: 1px solid #333;
+}
+
+/* ==========================================
+   WAITING VIEW (countdown, transitions)
+   ========================================== */
+#waiting-view {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 60vh;
+}
+
+.waiting-content {
+    text-align: center;
+}
+
+.waiting-icon {
+    font-size: 4rem;
+    margin-bottom: 16px;
+    animation: pulse-red 2s ease-in-out infinite;
+}
+
+.waiting-text {
+    font-size: 1.5rem;
+    color: #aaa;
+}
+
+/* ==========================================
+   MANAGEMENT VIEW
+   ========================================== */
+#management-view {
+    padding: 16px;
+}
+
+#next-game-info {
+    margin-bottom: 20px;
+}
+
+#next-game-info h2 {
+    font-size: 1rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: #888;
+    margin-bottom: 10px;
+}
+
+.team-preview {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+
+.team-preview-card {
+    display: flex;
+    flex-direction: column;
+    padding: 14px;
+    border-radius: 12px;
+    text-align: center;
+}
+
+.green-card {
+    background: #15803d;
+    color: white;
+}
+
+.yellow-card {
+    background: #ca8a04;
+    color: black;
+}
+
+.team-label {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    opacity: 0.8;
+}
+
+.team-name {
+    font-size: 1.3rem;
+    font-weight: 700;
+    margin-top: 4px;
+    word-break: break-word;
+}
+
+/* Control Grid */
+#control-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+
+.ctrl-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 16px 10px;
+    background: #1e3a5f;
+    color: #ffffff;
+    border: 2px solid #2a5080;
+    border-radius: 12px;
+    cursor: pointer;
+    min-height: 80px;
+    font-family: inherit;
+    transition: transform 0.1s ease, background 0.1s ease;
+}
+
+.ctrl-btn:active {
+    transform: scale(0.95);
+    background: #2a5080;
+}
+
+.ctrl-btn.cooldown {
+    opacity: 0.5;
+    pointer-events: none;
+}
+
+.wide-btn {
+    /* spans full width if needed */
+}
+
+.ctrl-label {
+    font-size: 0.9rem;
+    font-weight: 600;
+}
+
+.ctrl-value {
+    font-size: 1.3rem;
+    font-weight: 800;
+    margin-top: 4px;
+    color: #fbbf24;
+}
+
+/* ==========================================
+   CONNECTION STATUS
+   ========================================== */
+#connection-status {
+    position: fixed;
+    bottom: 8px;
+    right: 8px;
+    font-size: 0.7rem;
+    padding: 4px 10px;
+    border-radius: 20px;
+    background: #22c55e;
+    color: white;
+    font-weight: 600;
+    z-index: 200;
+    transition: background 0.3s ease;
+}
+
+#connection-status.disconnected {
+    background: #ef4444;
+}
+
+/* ==========================================
+   RESPONSIVE: Larger screens
+   ========================================== */
+@media (min-width: 500px) {
+    .score-btn {
+        min-height: 80px;
+        font-size: 1.3rem;
+    }
+
+    .down-btn {
+        min-height: 55px;
+    }
+
+    #timer-display {
+        font-size: 3.5rem;
+    }
+
+    .header-team-score {
+        font-size: 3rem;
+    }
+}
