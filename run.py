@@ -20,8 +20,10 @@ import sqlite3
 import ctypes
 import requests
 from SyncWithChallonge import * 
-import justpy as jp
-import asyncio
+from flask import Flask, render_template, send_from_directory
+from flask_socketio import SocketIO, emit
+import json
+import logging
 
 DeBug = False
 
@@ -229,7 +231,7 @@ class TTSThread(threading.Thread):
         voices = tts_engine.getProperty("voices")
         tts_engine.setProperty("voice", voices[1].id)
         rate = tts_engine.getProperty("rate")   # getting details of current speaking rate
-        tts_engine.setProperty("rate", 125)  
+        tts_engine.setProperty("rate", 150)  
         t_running = True
         while t_running:
             if self.queue.empty():
@@ -243,231 +245,124 @@ class TTSThread(threading.Thread):
         tts_engine.endLoop()
 
 
-# Thread for score Web
+# Thread for score Web (Flask + SocketIO)
 class WebGameThread(threading.Thread):
-    
+
     def __init__(self):
         threading.Thread.__init__(self)
         self.daemon = True
+
+        # Suppress Flask/Werkzeug request logging
+        log = logging.getLogger('werkzeug')
+        log.setLevel(logging.ERROR)
+
+        self.app = Flask(__name__,
+                         template_folder=join(path, 'web', 'templates'),
+                         static_folder=join(path, 'web', 'static'))
+        self.app.config['SECRET_KEY'] = 'sherwood-timer-secret'
+        self.socketio = SocketIO(self.app,
+                                  async_mode='threading',
+                                  cors_allowed_origins='*')
+        self._setup_routes()
+        self._setup_socketio_events()
         self.start()
 
-    def ButtonHit(self, msg):
-        if GameRunning == "Playing":
-            if self.ButtonName == "GHU": Green_Hit_Up()
-            elif self.ButtonName == "GSU": Green_Spot_Up()
-            elif self.ButtonName == "GCU": Green_Catch_Up()
-            elif self.ButtonName == "GPU": Green_Penalty_Up()
-            elif self.ButtonName == "YHU": Yellow_Hit_Up()
-            elif self.ButtonName == "YSU": Yellow_Spot_Up()
-            elif self.ButtonName == "YCU": Yellow_Catch_Up()
-            elif self.ButtonName == "YPU": Yellow_Penalty_Up()
-            elif self.ButtonName == "GHD": Green_Hit_Down()
-            elif self.ButtonName == "GSD": Green_Spot_Down()
-            elif self.ButtonName == "GCD": Green_Catch_Down()
-            elif self.ButtonName == "GPD": Green_Penalty_Down()
-            elif self.ButtonName == "YHD": Yellow_Hit_Down()
-            elif self.ButtonName == "YSD": Yellow_Spot_Down()
-            elif self.ButtonName == "YCD": Yellow_Catch_Down()
-            elif self.ButtonName == "YPD": Yellow_Penalty_Down()
-        else:
-            if self.ButtonName == "GT": ButtonPressed(pygame.K_5) # Game Type
-            elif self.ButtonName == "NG": ButtonPressed(pygame.K_RIGHT) # Pull Next Game
-            elif self.ButtonName == "FG": ButtonPressed(pygame.K_UP) # Pull First Game
-            elif self.ButtonName == "RD": ButtonPressed(pygame.K_DOWN) # Pull Data from Challonge
-            elif self.ButtonName == "AI": ButtonPressed(pygame.K_BACKSPACE) # Toggle Auto Instructions
-            elif self.ButtonName == "TT": ButtonPressed(pygame.K_3) # Toggle API integration
-            elif self.ButtonName == "TM": ButtonPressed(pygame.K_7) # Toggle Between Game Music
-            elif self.ButtonName == "MV": ButtonPressed(pygame.K_9) # Toggle Between Game Music Volumn  
-    
-    @jp.SetRoute('/ctl')
-    def sawebctl():
-        wp = jp.WebPage()
-        wp.title = "Sherwood Adventure Timer Control"
-        jp.Space(num=3,a=wp)
-        wp.head_html = '<meta http-equiv="refresh" content="5" >'
-        if GameRunning == 'No':
-            button_grid = jp.Div(classes='grid grid-cols-2 gap-4', a=wp)
-            Button = 'w-dvw text-7xl m-4 p-1 bg-green-700 text-yellow-500 text-center'
-            Display = 'w-dvw text-7xl m-4 p-1 bg-white text-black text-center'
-            
-            GT = jp.Div(text="Game Type", a=button_grid, classes=Button)
-            GT.ButtonName = "GT"
-            GT.on('click', WebGameThread.ButtonHit, debounce=500, immediate=False )
-            Text = CurrentGameType
-            jp.Div(text=Text, a=button_grid, classes=Display)
+    def _setup_routes(self):
+        @self.app.route('/')
+        def index():
+            return render_template('index.html')
 
-            AI = jp.Div(text="Auto Instructions", a=button_grid, classes=Button)
-            AI.ButtonName = "AI"
-            AI.on('click', WebGameThread.ButtonHit, debounce=500, immediate=False )
-            if AutoInst:
-                Text = "ON"
+        @self.app.route('/favicon.ico')
+        def favicon():
+            return send_from_directory(join(path, 'web'), 'favicon.ico', mimetype='image/x-icon')
+
+    def _setup_socketio_events(self):
+        @self.socketio.on('connect')
+        def handle_connect():
+            emit('state_update', self._get_full_state())
+
+        @self.socketio.on('score_action')
+        def handle_score(data):
+            action = data.get('action', '')
+            success = False
+            # Game control actions (pause/stop work during play, start when idle)
+            if action == 'PAUSE' and GameRunning in ("Playing", "Pause"):
+                PauseVid()
+                success = True
+            elif action == 'STOP' and GameRunning in ("Playing", "Pause"):
+                StopVid()
+                pygame.mixer.Sound.play(Close)
+                success = True
+            elif action == 'START' and GameRunning in ("No", "Finished"):
+                StartGame()
+                success = True
+            elif GameRunning == "Playing":
+                score_map = {
+                    'GHU': Green_Hit_Up,    'GHD': Green_Hit_Down,
+                    'GSU': Green_Spot_Up,   'GSD': Green_Spot_Down,
+                    'GCU': Green_Catch_Up,  'GCD': Green_Catch_Down,
+                    'GPU': Green_Penalty_Up,'GPD': Green_Penalty_Down,
+                    'YHU': Yellow_Hit_Up,   'YHD': Yellow_Hit_Down,
+                    'YSU': Yellow_Spot_Up,  'YSD': Yellow_Spot_Down,
+                    'YCU': Yellow_Catch_Up, 'YCD': Yellow_Catch_Down,
+                    'YPU': Yellow_Penalty_Up,'YPD': Yellow_Penalty_Down,
+                }
+                func = score_map.get(action)
+                if func:
+                    func()
+                    success = True
             else:
-                Text = "OFF"
-            jp.Div(text=Text, a=button_grid, classes=Display)
-            
-            TT = jp.Div(text="Tourn Integration", a=button_grid, classes=Button)
-            TT.ButtonName = "TT"
-            TT.on('click', WebGameThread.ButtonHit, debounce=500, immediate=False )
-            if APIIitegration:
-                Text = "ON"
-            else:
-                Text = "OFF"
-            jp.Div(text=Text, a=button_grid, classes=Display)
-            
-            NG = jp.Div(text="Next Game", a=button_grid, classes=Button)
-            NG.ButtonName = "NG"
-            NG.on('click', WebGameThread.ButtonHit, debounce=500, immediate=False )
-     
-            FG = jp.Div(text="First Game", a=button_grid, classes=Button)
-            FG.ButtonName = "FG"
-            FG.on('click', WebGameThread.ButtonHit, debounce=500, immediate=False )
-            
-            jp.P(text="Green:", a=button_grid, classes="text-7xl")
-            jp.P(text="Yellow:", a=button_grid, classes="text-7xl")
-            Text = NextGame.get("GreenTeamName")
-            jp.P(text=Text, a=button_grid, classes="text-7xl")
-            
-            Text =  "  " + NextGame.get("YellowTeamName")
-            jp.P(text=Text, a=button_grid, classes="text-7xl")          
-            
-            
-            
-            TM = jp.Div(text="Music", a=button_grid, classes=Button)
-            TM.ButtonName = "TM"
-            TM.on('click', WebGameThread.ButtonHit, debounce=500, immediate=False )
-            if BackgroundMusic:
-                Text = "ON"
-            else:
-                Text = "OFF"
-            jp.Div(text=Text, a=button_grid, classes=Display)
-            
-            MV = jp.Div(text="Music Volume", a=button_grid, classes=Button)
-            MV.ButtonName = "MV"
-            MV.on('click', WebGameThread.ButtonHit, debounce=500, immediate=False )
-            Text = str(int(BackgroundVol * 100) )
-            jp.Div(text=Text, a=button_grid, classes=Display)
-        
-        else:
-            wp.head_html = '<meta http-equiv="refresh" content="10" >'
-            jp.P(text="Game Running", a=wp, classes="text-7xl")
-                
+                ctrl_map = {
+                    'GT': pygame.K_5,       'NG': pygame.K_RIGHT,
+                    'FG': pygame.K_UP,      'RD': pygame.K_DOWN,
+                    'AI': pygame.K_BACKSPACE, 'TT': pygame.K_3,
+                    'TM': pygame.K_7,       'MV': pygame.K_9,
+                }
+                key = ctrl_map.get(action)
+                if key:
+                    ButtonPressed(key)
+                    success = True
+            emit('score_ack', {'action': action, 'success': success})
+            # Broadcast updated state to ALL clients immediately
+            self.socketio.emit('state_update', self._get_full_state())
 
-        return wp
+        @self.socketio.on('request_state')
+        def handle_request_state():
+            emit('state_update', self._get_full_state())
 
+    def broadcast_state(self):
+        """Called from main loop to push state to all connected clients."""
+        self.socketio.emit('state_update', self._get_full_state())
 
-    @jp.SetRoute('/')
-    def saweb():
-        wp = jp.WebPage()
-        wp.title = "Sherwood Adventure Timer Control"
-        jp.Space(num=3,a=wp)
-        if GameRunning == 'No':
-            wp.head_html = '<meta http-equiv="refresh" content="10" >'
-            jp.P(text="No Game Running", a=wp, classes="text-7xl")
-            jp.Space(num=3,a=wp)
-            jp.P(text="Next Game", a=wp, classes="text-7xl")
-            jp.P(text="Green:", a=wp, classes="text-7xl")
-            Text = "  " + NextGame.get("GreenTeamName")
-            jp.P(text=Text, a=wp, classes="text-7xl")
-            jp.Space(num=3,a=wp)
-            jp.P(text="Yellow:", a=wp, classes="text-7xl")
-            Text =  "  " + NextGame.get("YellowTeamName")
-            jp.P(text=Text, a=wp, classes="text-7xl")
+    def _get_full_state(self):
+        """Snapshot all global state into a dict for the client."""
+        return {
+            'gameRunning': GameRunning,
+            'currentGameType': CurrentGameType,
+            'secondsLeft': SecondsLeft,
+            'greenScores': dict(GreenScores),
+            'yellowScores': dict(YellowScores),
+            'currentGame': {
+                'GameNumber': CurrentGame.get('GameNumber', 0),
+                'GreenTeamName': CurrentGame.get('GreenTeamName', ''),
+                'YellowTeamName': CurrentGame.get('YellowTeamName', ''),
+                'GameType': CurrentGame.get('GameType', ''),
+                'GameStatus': CurrentGame.get('GameStatus', ''),
+            },
+            'nextGame': {
+                'GameNumber': NextGame.get('GameNumber', 0),
+                'GreenTeamName': NextGame.get('GreenTeamName', ''),
+                'YellowTeamName': NextGame.get('YellowTeamName', ''),
+            },
+            'backgroundMusic': BackgroundMusic,
+            'backgroundVol': int(BackgroundVol * 100),
+            'autoInst': AutoInst,
+            'apiIntegration': APIIitegration,
+        }
 
-        elif GameRunning == 'Countdown':
-            wp.head_html = '<meta http-equiv="refresh" content="10" >'
-            jp.P(text="Countdown Running", a=wp, classes="text-7xl")  
-        else:
-            wp.head_html = '<meta http-equiv="refresh" content="30" >'
-            button_grid = jp.Div(classes='grid grid-cols-2 gap-4', a=wp)
-            GreenButton = 'w-dvw text-7xl m-4 p-1 bg-green-700 text-white text-center'
-            YellowButton = 'w-dvw text-7xl m-4 p-1 bg-yellow-500 text-black text-center'
-            
-            ghu = jp.Div(text="Green Hit Up", a=button_grid, classes=GreenButton)
-            ghu.ButtonName = "GHU"
-            ghu.on('click', WebGameThread.ButtonHit, debounce=500, immediate=False )
-
-            yhu = jp.Div(text="Yellow Hit Up", a=button_grid, classes=YellowButton)
-            yhu.ButtonName = "YHU"
-            yhu.on('click', WebGameThread.ButtonHit, debounce=500, immediate=False )
-            
-            if CurrentGameType == "Elimination":
-                gsu = jp.Div(text="Green Spot Up", a=button_grid, classes=GreenButton)
-                gsu.ButtonName = "GSU"
-                gsu.on('click', WebGameThread.ButtonHit, debounce=500, immediate=False )
-            
-            if CurrentGameType == "Elimination":
-                ysu = jp.Div(text="Yellow Spot Up", a=button_grid, classes=YellowButton)
-                ysu.ButtonName = "YSU"
-                ysu.on('click', WebGameThread.ButtonHit, debounce=500, immediate=False )
-            
-            if CurrentGameType in ("Elimination","Sanction"):
-                gcu = jp.Div(text="Green Catch Up", a=button_grid, classes=GreenButton)
-                gcu.ButtonName = "GCU"
-                gcu.on('click', WebGameThread.ButtonHit, debounce=500, immediate=False )
-            
-            if CurrentGameType in ("Elimination","Sanction"):
-                ycu = jp.Div(text="Yellow Catch Up", a=button_grid, classes=YellowButton)
-                ycu.ButtonName = "YCU"
-                ycu.on('click', WebGameThread.ButtonHit, debounce=500, immediate=False )
-            
-            if CurrentGameType in ("Elimination","Sanction"):
-                gpu = jp.Div(text="Green Penalty Up", a=button_grid, classes=GreenButton)
-                gpu.ButtonName = "GPU"
-                gpu.on('click', WebGameThread.ButtonHit, debounce=500, immediate=False )
-            
-            if CurrentGameType in ("Elimination","Sanction"):
-                ypu = jp.Div(text="Yellow Penalty Up", a=button_grid, classes=YellowButton)
-                ypu.ButtonName = "YPU"
-                ypu.on('click', WebGameThread.ButtonHit, debounce=500, immediate=False )
-
-
-            if CurrentGameType in ("Normal","Sanction"):
-                jp.Div(text=" ----- ", a=button_grid, classes=GreenButton)
-                jp.Div(text=" ----- ", a=button_grid, classes=YellowButton)
-
-            ghd = jp.Div(text="Green Hit Down", a=button_grid, classes=GreenButton)
-            ghd.ButtonName = "GHD"
-            ghd.on('click', WebGameThread.ButtonHit, debounce=500, immediate=False )
-
-            yhd = jp.Div(text="Yellow Hit Down", a=button_grid, classes=YellowButton)
-            yhd.ButtonName = "YHD"
-            yhd.on('click', WebGameThread.ButtonHit, debounce=500, immediate=False )
-            
-            if CurrentGameType == "Elimination":
-                gsd = jp.Div(text="Green Spot Down", a=button_grid, classes=GreenButton)
-                gsd.ButtonName = "GSD"
-                gsd.on('click', WebGameThread.ButtonHit, debounce=500, immediate=False )
-            
-            if CurrentGameType == "Elimination":
-                ysd = jp.Div(text="Yellow Spot Down", a=button_grid, classes=YellowButton)
-                ysd.ButtonName = "YSD"
-                ysd.on('click', WebGameThread.ButtonHit, debounce=500, immediate=False )
-            
-            if CurrentGameType in ("Elimination","Sanction"):
-                gcd = jp.Div(text="Green Catch Down", a=button_grid, classes=GreenButton)
-                gcd.ButtonName = "GCD"
-                gcd.on('click', WebGameThread.ButtonHit, debounce=500, immediate=False )
-            
-            if CurrentGameType in ("Elimination","Sanction"):
-                ycd = jp.Div(text="Yellow Catch Down", a=button_grid, classes=YellowButton)
-                ycd.ButtonName = "YCD"
-                ycd.on('click', WebGameThread.ButtonHit, debounce=500, immediate=False )
-            
-            if CurrentGameType in ("Elimination","Sanction"):
-                gpd = jp.Div(text="Green Penalty Down", a=button_grid, classes=GreenButton)
-                gpd.ButtonName = "GPD"
-                gpd.on('click', WebGameThread.ButtonHit, debounce=500, immediate=False )
-            
-            if CurrentGameType in ("Elimination","Sanction"):
-                ypd = jp.Div(text="Yellow Penalty Down", a=button_grid, classes=YellowButton)
-                ypd.ButtonName = "YPD"
-                ypd.on('click', WebGameThread.ButtonHit, debounce=500, immediate=False )
-
-        return wp
-        
-    def run(self):   
-        while 1 == 1: 
-            jp.justpy(port=80,host='0.0.0.0')
+    def run(self):
+        self.socketio.run(self.app, host='0.0.0.0', port=80,
+                          allow_unsafe_werkzeug=True)
 
 
 def GetNextGame(MinGameNumber=-1):
@@ -640,14 +535,15 @@ def WriteGameToDB():
 
         cur.execute(query
                     ,(
-                         pTotal 
-                        ,pHit 
-                        ,pCatch 
-                        ,pSpot 
-                        ,pPenalty 
-                        ,pExtraPoint 
+                         pTotal
+                        ,pHit
+                        ,pCatch
+                        ,pSpot
+                        ,pPenalty
+                        ,pExtraPoint
                         ,pSide
-                        ) 
+                        ,pGameNumber
+                        )
                     )
         conn.commit()
 
@@ -671,14 +567,15 @@ def WriteGameToDB():
         
         cur.execute(query
                     ,(
-                         pTotal 
-                        ,pHit 
-                        ,pCatch 
-                        ,pSpot 
-                        ,pPenalty 
-                        ,pExtraPoint 
+                         pTotal
+                        ,pHit
+                        ,pCatch
+                        ,pSpot
+                        ,pPenalty
+                        ,pExtraPoint
                         ,pSide
-                        ) 
+                        ,pGameNumber
+                        )
                     )
         conn.commit()
     except Exception as error:
@@ -1404,12 +1301,12 @@ def PlayAVideo(Video):
                             vShootInst.stop()
                             pygame.mixer.Sound.play(Close) 
 
-    vCountdown.resize((0,0))
-    vEliminationInst.resize((0, 0))
-    vNormalInst.resize((0,0))
-    vPromo.resize((0, 0))
-    vSanctionInst.resize((0, 0))
-    vShootInst.resize((0, 0))
+    vCountdown.resize((1,1))
+    vEliminationInst.resize((1, 1))
+    vNormalInst.resize((1,1))
+    vPromo.resize((1, 1))
+    vSanctionInst.resize((1, 1))
+    vShootInst.resize((1, 1))
     CurrentVid = "None"
     DrawScoreBoard() 
 
@@ -1421,18 +1318,19 @@ tts_thread = TTSThread(SpeakIt)
 SpeakIt.put("Welcome to Archery Tag by Sherwood Adventure.")
 
 CurrentVid = "None"
-vCountdown.resize((0,0))
-vEliminationInst.resize((0, 0))
-vNormalInst.resize((0,0))
-vPromo.resize((0, 0))
-vSanctionInst.resize((0, 0))
-vShootInst.resize((0, 0))
+vCountdown.resize((1,1))
+vEliminationInst.resize((1, 1))
+vNormalInst.resize((1,1))
+vPromo.resize((1, 1))
+vSanctionInst.resize((1, 1))
+vShootInst.resize((1, 1))
 
 GetNextGame()
 
 DrawScoreBoard() 
 
-WebGameThread()
+web_thread = WebGameThread()
+broadcast_tick = 0
 
 while 1:
 
@@ -1526,443 +1424,14 @@ while 1:
             pygame.mixer.music.stop()
     
 
-    pygame.display.update() 
-    
+    pygame.display.update()
+
+    # Broadcast state to web clients (~2Hz)
+    broadcast_tick += 1
+    if broadcast_tick >= 5:
+        web_thread.broadcast_state()
+        broadcast_tick = 0
+
     #Leave some CPU for others....
-    sleep(0.1)           
-  
+    sleep(0.1) 
         
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
- 
-  
-  
-  
-  
-
-
-   
-  
-        
-   
-        
- 
-  
-  
-  
-  
-
-
-   
-  
-        
-    
-        
-        
-        
-        
-        
-        
-        
-        
- 
-  
-  
-  
-  
-
-
-   
-  
-        
-      
-        
-        
- 
-  
-  
-  
-  
-
-
-   
-  
-        
-
-
-   
-  
-        
-
-
-   
-
-
-   
-  
-        
-
-
-   
-
-
-   
-  
-        
-
-
-      
-
-
-
-    
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
- 
-  
-  
-  
-  
-
-
-   
-  
-        
-   
-        
- 
-  
-  
-  
-  
-
-
-   
-  
-        
-    
-        
-        
-        
-        
-        
-        
-        
-        
- 
-  
-  
-  
-  
-
-
-   
-  
-        
-      
-        
-        
- 
-  
-  
-  
-  
-
-
-   
-  
-        
-
-
-   
-  
-        
-
-
-   
-
-
-   
-  
-        
-
-
-   
-
-
-   
-  
-        
-
-
-      
-
-
-
-
-
-   
-        
-        
-        
-        
- 
-  
-  
-  
-  
-
-
-   
-  
-        
-      
-        
-        
- 
-  
-  
-  
-  
-
-
-   
-  
-        
-
-
-   
-  
-        
-
-
-   
-
-
-   
-  
-        
-
-
-   
-
-
-   
-  
-        
-
-
-      
-
-
-
-
-
-
-        
-
-
-   
-
-
-   
-  
-        
-
-
-      
-
-
-
-
-
-   
-        
-        
-        
-        
- 
-  
-  
-  
-  
-
-
-   
-  
-        
-      
-        
-        
- 
-  
-  
-  
-  
-
-
-   
-  
-        
-
-
-   
-  
-        
-
-
-   
-
-
-   
-  
-        
-
-
-   
-
-
-   
-  
-        
-
-
-      
-
-
-
-
-
-     
-
-
-      
-
-
-
-
-
-
-
-
- 
-
-
-
-
-
-
-
-
-  
-
-
-      
-
-
-
-
-
-
-
-
- 
-
-
-
-
-
-
-
-
-
-
-
- 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-  
-
-
-      
-
-
-
-
-
-
-
-
- 
-
-
-
-
-
-
-
-
-
-
-
- 
-
-
-
-
-
-
-
-
-
-
-

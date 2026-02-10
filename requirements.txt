@@ -1,0 +1,9 @@
+pygame
+pyvidplayer2
+pyttsx3
+tinytag
+requests
+flask
+flask-socketio
+simple-websocket
+pychallonge
