@@ -368,6 +368,177 @@ body {
 }
 
 /* ==========================================
+   GAME CONTROLS: Pause / Stop (scoring screen)
+   ========================================== */
+.game-controls {
+    margin-top: 4px;
+    margin-bottom: 4px;
+}
+
+.game-controls-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+}
+
+.game-ctrl-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 14px 10px;
+    border: 2px solid transparent;
+    border-radius: 12px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 1.1rem;
+    font-weight: 700;
+    min-height: 56px;
+    transition: transform 0.1s ease, opacity 0.1s ease;
+}
+
+.game-ctrl-btn:active {
+    transform: scale(0.95);
+}
+
+.game-ctrl-icon {
+    font-size: 1.4rem;
+}
+
+.game-ctrl-label {
+    font-size: 1rem;
+}
+
+.pause-btn {
+    background: #1e3a5f;
+    color: #ffffff;
+    border-color: #3b82f6;
+}
+
+.pause-btn.is-paused {
+    background: #f59e0b;
+    color: #000;
+    border-color: #f59e0b;
+}
+
+.stop-btn {
+    background: #7f1d1d;
+    color: #ffffff;
+    border-color: #ef4444;
+}
+
+/* ==========================================
+   START GAME BUTTON (management screen)
+   ========================================== */
+.start-game-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    width: 100%;
+    padding: 18px 16px;
+    margin-bottom: 16px;
+    background: #15803d;
+    color: #ffffff;
+    border: 2px solid #22c55e;
+    border-radius: 12px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 1.3rem;
+    font-weight: 800;
+    min-height: 70px;
+    transition: transform 0.1s ease, background 0.1s ease;
+}
+
+.start-game-btn:active {
+    transform: scale(0.97);
+    background: #16a34a;
+}
+
+.start-game-icon {
+    font-size: 1.6rem;
+}
+
+.start-game-label {
+    font-size: 1.3rem;
+}
+
+/* ==========================================
+   CONFIRMATION MODAL
+   ========================================== */
+#confirm-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.7);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 500;
+}
+
+#confirm-overlay.hidden {
+    display: none !important;
+}
+
+#confirm-modal {
+    background: #1a1a3e;
+    border: 2px solid #444;
+    border-radius: 16px;
+    padding: 28px 24px;
+    text-align: center;
+    max-width: 340px;
+    width: 90%;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+}
+
+#confirm-message {
+    font-size: 1.3rem;
+    font-weight: 700;
+    margin-bottom: 24px;
+    line-height: 1.4;
+}
+
+#confirm-buttons {
+    display: flex;
+    gap: 12px;
+}
+
+.confirm-btn {
+    flex: 1;
+    padding: 16px 12px;
+    border: none;
+    border-radius: 10px;
+    font-family: inherit;
+    font-size: 1.2rem;
+    font-weight: 700;
+    cursor: pointer;
+    min-height: 56px;
+    transition: transform 0.1s ease;
+}
+
+.confirm-btn:active {
+    transform: scale(0.95);
+}
+
+.confirm-yes {
+    background: #ef4444;
+    color: white;
+}
+
+.confirm-no {
+    background: #374151;
+    color: white;
+}
+
+/* Start game confirmation uses green */
+.confirm-yes.confirm-start {
+    background: #15803d;
+}
+
+/* ==========================================
    CONNECTION STATUS
    ========================================== */
 #connection-status {

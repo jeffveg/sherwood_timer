@@ -285,7 +285,18 @@ class WebGameThread(threading.Thread):
         def handle_score(data):
             action = data.get('action', '')
             success = False
-            if GameRunning == "Playing":
+            # Game control actions (pause/stop work during play, start when idle)
+            if action == 'PAUSE' and GameRunning in ("Playing", "Pause"):
+                PauseVid()
+                success = True
+            elif action == 'STOP' and GameRunning in ("Playing", "Pause"):
+                StopVid()
+                pygame.mixer.Sound.play(Close)
+                success = True
+            elif action == 'START' and GameRunning in ("No", "Finished"):
+                StartGame()
+                success = True
+            elif GameRunning == "Playing":
                 score_map = {
                     'GHU': Green_Hit_Up,    'GHD': Green_Hit_Down,
                     'GSU': Green_Spot_Up,   'GSD': Green_Spot_Down,

@@ -124,6 +124,20 @@
                 </div>
             </div>
 
+            <!-- Game Controls: Pause / Stop -->
+            <div class="score-section game-controls">
+                <div class="game-controls-grid">
+                    <button class="game-ctrl-btn pause-btn" id="pause-btn" data-confirm="PAUSE">
+                        <span class="game-ctrl-icon" id="pause-icon">&#9208;</span>
+                        <span class="game-ctrl-label" id="pause-label">Pause</span>
+                    </button>
+                    <button class="game-ctrl-btn stop-btn" data-confirm="STOP">
+                        <span class="game-ctrl-icon">&#9209;</span>
+                        <span class="game-ctrl-label">Stop Game</span>
+                    </button>
+                </div>
+            </div>
+
         </main>
 
         <!-- WAITING VIEW (shown during countdown / transitions) -->
@@ -149,6 +163,11 @@
                     </div>
                 </div>
             </div>
+
+            <button class="start-game-btn" data-confirm="START">
+                <span class="start-game-icon">&#9654;</span>
+                <span class="start-game-label">Start Game</span>
+            </button>
 
             <div id="control-grid">
                 <button class="ctrl-btn" data-action="GT">
@@ -183,6 +202,17 @@
                 </button>
             </div>
         </main>
+
+        <!-- Confirmation Modal -->
+        <div id="confirm-overlay" class="hidden">
+            <div id="confirm-modal">
+                <div id="confirm-message">Are you sure?</div>
+                <div id="confirm-buttons">
+                    <button id="confirm-yes" class="confirm-btn confirm-yes">Yes</button>
+                    <button id="confirm-no" class="confirm-btn confirm-no">Cancel</button>
+                </div>
+            </div>
+        </div>
 
         <!-- Connection status -->
         <div id="connection-status">Connected</div>

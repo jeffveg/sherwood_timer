@@ -13,6 +13,9 @@ let state = {};
 const cooldowns = {};
 const DEBOUNCE_MS = 500;
 
+// Confirmation modal state
+let pendingConfirmAction = null;
+
 // ==========================================
 // DOM Element Cache
 // ==========================================
@@ -43,6 +46,11 @@ function cacheElements() {
     el.yellowCatchVal = document.getElementById('yellow-catch-val');
     el.yellowPenaltyVal = document.getElementById('yellow-penalty-val');
 
+    // Game control buttons
+    el.pauseBtn = document.getElementById('pause-btn');
+    el.pauseIcon = document.getElementById('pause-icon');
+    el.pauseLabel = document.getElementById('pause-label');
+
     // Waiting
     el.waitingMessage = document.getElementById('waiting-message');
 
@@ -54,30 +62,36 @@ function cacheElements() {
     el.apiIntVal = document.getElementById('api-int-val');
     el.musicVal = document.getElementById('music-val');
     el.volVal = document.getElementById('vol-val');
+
+    // Confirmation modal
+    el.confirmOverlay = document.getElementById('confirm-overlay');
+    el.confirmMessage = document.getElementById('confirm-message');
+    el.confirmYes = document.getElementById('confirm-yes');
+    el.confirmNo = document.getElementById('confirm-no');
 }
 
 // ==========================================
 // SocketIO Event Handlers
 // ==========================================
-socket.on('connect', () => {
+socket.on('connect', function() {
     updateConnectionStatus(true);
 });
 
-socket.on('disconnect', () => {
+socket.on('disconnect', function() {
     updateConnectionStatus(false);
 });
 
-socket.on('reconnect', () => {
+socket.on('reconnect', function() {
     updateConnectionStatus(true);
     socket.emit('request_state');
 });
 
-socket.on('state_update', (data) => {
+socket.on('state_update', function(data) {
     state = data;
     render();
 });
 
-socket.on('score_ack', (data) => {
+socket.on('score_ack', function(data) {
     if (data.success) {
         flashButton(data.action);
     }
@@ -103,9 +117,9 @@ function updateConnectionStatus(connected) {
 function render() {
     if (!state.gameRunning) return;
 
-    const isPlaying = state.gameRunning === 'Playing' || state.gameRunning === 'Pause';
-    const isTransition = ['Countdown', 'Ready', 'AutoInst', 'Stop'].indexOf(state.gameRunning) !== -1;
-    const isIdle = state.gameRunning === 'No' || state.gameRunning === 'Finished';
+    var isPlaying = state.gameRunning === 'Playing' || state.gameRunning === 'Pause';
+    var isTransition = ['Countdown', 'Ready', 'AutoInst', 'Stop'].indexOf(state.gameRunning) !== -1;
+    var isIdle = state.gameRunning === 'No' || state.gameRunning === 'Finished';
 
     // Show/hide views
     toggleEl(el.gameHeader, isPlaying || isTransition);
@@ -177,6 +191,14 @@ function renderScoringView() {
     toggleButtons('.spot-btn', showSpot);
     toggleButtons('.catch-btn', showCatchPenalty);
     toggleButtons('.penalty-btn', showCatchPenalty);
+
+    // Update pause button to reflect current state
+    if (el.pauseBtn) {
+        var isPaused = state.gameRunning === 'Pause';
+        el.pauseBtn.classList.toggle('is-paused', isPaused);
+        if (el.pauseIcon) el.pauseIcon.innerHTML = isPaused ? '&#9654;' : '&#9208;';
+        if (el.pauseLabel) el.pauseLabel.textContent = isPaused ? 'Resume' : 'Pause';
+    }
 }
 
 function renderWaitingView() {
@@ -225,6 +247,7 @@ function toggleButtons(selector, show) {
 
 function flashButton(action) {
     var btn = document.querySelector('[data-action="' + action + '"]');
+    if (!btn) btn = document.querySelector('[data-confirm="' + action + '"]');
     if (!btn) return;
     btn.classList.remove('flash');
     // Trigger reflow to restart animation
@@ -234,6 +257,38 @@ function flashButton(action) {
     if (navigator.vibrate) {
         navigator.vibrate(30);
     }
+}
+
+// ==========================================
+// Confirmation Modal
+// ==========================================
+function showConfirm(action) {
+    var messages = {
+        'PAUSE': state.gameRunning === 'Pause' ? 'Resume the game?' : 'Pause the game?',
+        'STOP': 'Stop the game? This cannot be undone.',
+        'START': 'Start the game?'
+    };
+
+    pendingConfirmAction = action;
+    el.confirmMessage.textContent = messages[action] || 'Are you sure?';
+
+    // Use green color for start, red for others
+    el.confirmYes.classList.toggle('confirm-start', action === 'START');
+    el.confirmYes.textContent = action === 'STOP' ? 'Stop Game' : 'Yes';
+
+    el.confirmOverlay.classList.remove('hidden');
+}
+
+function hideConfirm() {
+    el.confirmOverlay.classList.add('hidden');
+    pendingConfirmAction = null;
+}
+
+function confirmAction() {
+    if (pendingConfirmAction) {
+        socket.emit('score_action', { action: pendingConfirmAction });
+    }
+    hideConfirm();
 }
 
 // ==========================================
@@ -257,25 +312,72 @@ function handleButtonClick(e) {
     socket.emit('score_action', { action: action });
 }
 
+function handleConfirmButtonClick(e) {
+    var btn = e.currentTarget;
+    var action = btn.dataset.confirm;
+    if (!action) return;
+
+    // Show confirmation dialog instead of sending directly
+    showConfirm(action);
+}
+
 // ==========================================
 // Initialization
 // ==========================================
 document.addEventListener('DOMContentLoaded', function() {
     cacheElements();
 
-    // Attach click handlers to all buttons with data-action
-    var buttons = document.querySelectorAll('[data-action]');
-    buttons.forEach(function(btn) {
-        // Use touchend for mobile to avoid 300ms delay, fall back to click
+    // Attach click handlers to regular action buttons (data-action)
+    var actionButtons = document.querySelectorAll('[data-action]');
+    actionButtons.forEach(function(btn) {
         btn.addEventListener('touchend', function(e) {
             e.preventDefault();
             handleButtonClick(e);
         });
         btn.addEventListener('click', function(e) {
-            // Only fire if not already handled by touchend
             if (e.sourceCapabilities && e.sourceCapabilities.firesTouchEvents) return;
             handleButtonClick(e);
         });
+    });
+
+    // Attach click handlers to confirm buttons (data-confirm) — these show modal first
+    var confirmButtons = document.querySelectorAll('[data-confirm]');
+    confirmButtons.forEach(function(btn) {
+        btn.addEventListener('touchend', function(e) {
+            e.preventDefault();
+            handleConfirmButtonClick(e);
+        });
+        btn.addEventListener('click', function(e) {
+            if (e.sourceCapabilities && e.sourceCapabilities.firesTouchEvents) return;
+            handleConfirmButtonClick(e);
+        });
+    });
+
+    // Modal: Yes button
+    el.confirmYes.addEventListener('touchend', function(e) {
+        e.preventDefault();
+        confirmAction();
+    });
+    el.confirmYes.addEventListener('click', function(e) {
+        if (e.sourceCapabilities && e.sourceCapabilities.firesTouchEvents) return;
+        confirmAction();
+    });
+
+    // Modal: Cancel button
+    el.confirmNo.addEventListener('touchend', function(e) {
+        e.preventDefault();
+        hideConfirm();
+    });
+    el.confirmNo.addEventListener('click', function(e) {
+        if (e.sourceCapabilities && e.sourceCapabilities.firesTouchEvents) return;
+        hideConfirm();
+    });
+
+    // Modal: Click overlay backdrop to cancel
+    el.confirmOverlay.addEventListener('click', function(e) {
+        if (e.target === el.confirmOverlay) {
+            hideConfirm();
+        }
     });
 
     // Request full state on load
