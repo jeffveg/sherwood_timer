@@ -1,0 +1,51 @@
+changes to timer
+
+
+As soon as the refresh from challonge if the first game is a default game ( green team = green team) mark the game as skipped in the database
+
+if type is Tournament change the values default values 
+Normal 
+
+ScoreValues = {
+"Hit"       : 1,
+"Catch"     : 2,
+"Spot"      : 1,
+"Penalty"   : -1,
+"ExtraPoint": 1
+}
+
+
+Tournament 
+ScoreValues = {
+"Hit"       : 1,
+"Catch"     : 3,
+"Spot"      : 0,
+"Penalty"   : -2,
+"ExtraPoint": 0
+}
+
+
+add a admin page for changing default values
+
+
+SongList            = "SongList/EDM"
+The song list should be  pull down of the directories under SongList
+
+DefaultGameRunTime  = 5
+SanctionGameRunTime = 8
+
+
+there have been a few time the program crashed when writing to the database or grabbing data from the API integration improve error handling all over so if there are errors 
+it will keep the program running. save any error messages to a log in the Gamerecordings folder with a date stamp so we can debug later
+
+
+Make the text to speech easier to hear when music is playing 
+
+Add a new web page for configuring the Tournament once the Tournament API has been turned onn
+Pull the list of all non-played Tournaments and create a way to pick the to pick the correct one to be loaded you can use the Tournament Name and optional start date and time
+After each game is played update just the team names. If any team start with FF_ consider the team to forfeit and mark any future games with that team as looser with the game status of forfeit
+On this page allow changing the order of the games or mark/unmark a game or team forfeit
+if marked/unmarked update the Tournament integration ( skip this if the integration is challonge )
+
+
+Add a new Tournament integration with the sherwood_Signup code can be found here 

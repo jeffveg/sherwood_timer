@@ -88,6 +88,12 @@ socket.on('reconnect', function() {
 
 socket.on('state_update', function(data) {
     state = data;
+    // Apply outdoor/light theme from server state
+    if (data.outdoorMode) {
+        document.body.setAttribute('data-theme', 'light');
+    } else {
+        document.body.removeAttribute('data-theme');
+    }
     render();
 });
 
@@ -186,11 +192,14 @@ function renderScoringView() {
 
     // Button visibility based on game type
     var showSpot = gt === 'Elimination';
-    var showCatchPenalty = gt === 'Elimination' || gt === 'Sanction';
+    var showCatchPenalty = gt === 'Elimination' || gt === 'Sanction' || gt === 'Tournament';
 
     toggleButtons('.spot-btn', showSpot);
     toggleButtons('.catch-btn', showCatchPenalty);
     toggleButtons('.penalty-btn', showCatchPenalty);
+
+    // Early Win button only visible for Elimination
+    toggleButtons('.elim-only-btn', gt === 'Elimination');
 
     // Update pause button to reflect current state
     if (el.pauseBtn) {
@@ -263,18 +272,32 @@ function flashButton(action) {
 // Confirmation Modal
 // ==========================================
 function showConfirm(action) {
+    // Determine which team is leading for early win message
+    var leadingTeam = '';
+    if (state.greenScores && state.yellowScores) {
+        var gTotal = state.greenScores.Total || 0;
+        var yTotal = state.yellowScores.Total || 0;
+        if (yTotal > gTotal) {
+            leadingTeam = (state.currentGame && state.currentGame.YellowTeamName) || 'Yellow';
+        } else {
+            leadingTeam = (state.currentGame && state.currentGame.GreenTeamName) || 'Green';
+        }
+    }
+
     var messages = {
         'PAUSE': state.gameRunning === 'Pause' ? 'Resume the game?' : 'Pause the game?',
         'STOP': 'Stop the game? This cannot be undone.',
-        'START': 'Start the game?'
+        'START': 'Start the game?',
+        'EARLYWIN': 'End game early and award bonus point to ' + leadingTeam + '?'
     };
 
     pendingConfirmAction = action;
     el.confirmMessage.textContent = messages[action] || 'Are you sure?';
 
-    // Use green color for start, red for others
+    // Use green color for start, amber for early win, red for stop
     el.confirmYes.classList.toggle('confirm-start', action === 'START');
-    el.confirmYes.textContent = action === 'STOP' ? 'Stop Game' : 'Yes';
+    el.confirmYes.classList.toggle('confirm-earlywin', action === 'EARLYWIN');
+    el.confirmYes.textContent = action === 'STOP' ? 'Stop Game' : action === 'EARLYWIN' ? 'Award Win' : 'Yes';
 
     el.confirmOverlay.classList.remove('hidden');
 }

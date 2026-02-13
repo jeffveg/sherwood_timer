@@ -427,6 +427,13 @@ body {
     border-color: #ef4444;
 }
 
+.earlywin-btn {
+    background: #92400e;
+    color: #fbbf24;
+    border-color: #f59e0b;
+    grid-column: 1 / -1;
+}
+
 /* ==========================================
    START GAME BUTTON (management screen)
    ========================================== */
@@ -538,6 +545,12 @@ body {
     background: #15803d;
 }
 
+/* Early win confirmation uses amber */
+.confirm-yes.confirm-earlywin {
+    background: #92400e;
+    color: #fbbf24;
+}
+
 /* ==========================================
    CONNECTION STATUS
    ========================================== */
@@ -557,6 +570,169 @@ body {
 
 #connection-status.disconnected {
     background: #ef4444;
+}
+
+/* ==========================================
+   Admin Settings Link
+   ========================================== */
+.admin-link {
+    display: block;
+    text-align: center;
+    margin-top: 16px;
+    padding: 10px;
+    color: rgba(255, 255, 255, 0.4);
+    text-decoration: none;
+    font-size: 0.85rem;
+    font-weight: 500;
+    transition: color 0.2s;
+}
+
+.admin-link:hover {
+    color: rgba(255, 255, 255, 0.7);
+}
+
+/* ==========================================
+   Light / Outdoor Theme Overrides
+   ========================================== */
+body[data-theme="light"] {
+    background: #f0f0f0;
+    color: #1a1a1a;
+}
+
+body[data-theme="light"] #game-header {
+    background: #e0e0e0;
+    border-bottom-color: #cccccc;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+body[data-theme="light"] .header-team-name {
+    color: #333333;
+}
+
+body[data-theme="light"] #timer-display {
+    color: #1a1a1a;
+}
+
+body[data-theme="light"] #timer-display.overtime {
+    color: #dc2626;
+}
+
+body[data-theme="light"] #timer-display.paused {
+    color: #d97706;
+}
+
+body[data-theme="light"] .section-label {
+    color: #666666;
+}
+
+body[data-theme="light"] .green-btn {
+    background: #16a34a;
+    color: #ffffff;
+}
+
+body[data-theme="light"] .green-btn:active {
+    background: #15803d;
+}
+
+body[data-theme="light"] .yellow-btn {
+    background: #eab308;
+    color: #000000;
+}
+
+body[data-theme="light"] .yellow-btn:active {
+    background: #ca8a04;
+}
+
+body[data-theme="light"] .corrections {
+    border-top-color: #cccccc;
+}
+
+body[data-theme="light"] #waiting-view .waiting-text {
+    color: #555555;
+}
+
+body[data-theme="light"] #management-view #next-game-info h2 {
+    color: #666666;
+}
+
+body[data-theme="light"] .ctrl-btn {
+    background: #d0d8e8;
+    color: #1a1a1a;
+    border-color: #a0b0c8;
+}
+
+body[data-theme="light"] .ctrl-btn:active {
+    background: #b8c4d8;
+}
+
+body[data-theme="light"] .ctrl-value {
+    color: #b45309;
+}
+
+body[data-theme="light"] .pause-btn {
+    background: #bfdbfe;
+    color: #1a1a1a;
+    border-color: #3b82f6;
+}
+
+body[data-theme="light"] .pause-btn.is-paused {
+    background: #f59e0b;
+    color: #000000;
+    border-color: #d97706;
+}
+
+body[data-theme="light"] .stop-btn {
+    background: #fecaca;
+    color: #991b1b;
+    border-color: #ef4444;
+}
+
+body[data-theme="light"] .earlywin-btn {
+    background: #fde68a;
+    color: #92400e;
+    border-color: #f59e0b;
+}
+
+body[data-theme="light"] .start-game-btn {
+    background: #16a34a;
+    color: #ffffff;
+    border-color: #15803d;
+}
+
+body[data-theme="light"] .start-game-btn:active {
+    background: #15803d;
+}
+
+body[data-theme="light"] #confirm-modal {
+    background: #ffffff;
+    border-color: #cccccc;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+}
+
+body[data-theme="light"] #confirm-message {
+    color: #1a1a1a;
+}
+
+body[data-theme="light"] .confirm-no {
+    background: #d1d5db;
+    color: #1a1a1a;
+}
+
+body[data-theme="light"] #connection-status {
+    background: #16a34a;
+    color: white;
+}
+
+body[data-theme="light"] #connection-status.disconnected {
+    background: #ef4444;
+}
+
+body[data-theme="light"] .admin-link {
+    color: #888888;
+}
+
+body[data-theme="light"] .admin-link:hover {
+    color: #333333;
 }
 
 /* ==========================================

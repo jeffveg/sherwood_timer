@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>Scoreboard - Sherwood Adventure Timer</title>
+    <link rel="apple-touch-icon" href="/static/../apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="/static/../favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/static/../favicon-16x16.png">
+    <link rel="stylesheet" href="/static/css/scoreboard.css">
+</head>
+<body>
+
+    <div id="scoreboard">
+
+        <!-- GAME TYPE BADGE (top corner, visible during game) -->
+        <div id="game-type-badge" class="hidden"></div>
+
+        <!-- PLAYING VIEW: Timer + Score Columns -->
+        <div id="playing-view" class="hidden">
+            <div id="timer-container">
+                <div id="timer-display">0:00</div>
+            </div>
+
+            <div id="score-columns">
+                <!-- Green Team -->
+                <div class="team-column green-column">
+                    <div class="team-name" id="green-team-name">Green</div>
+                    <div class="team-total" id="green-total">0</div>
+                    <div class="score-breakdown" id="green-breakdown">
+                        <div class="breakdown-row" id="green-hit-row">
+                            <span class="breakdown-label">Hit</span>
+                            <span class="breakdown-value" id="green-hit">0</span>
+                        </div>
+                        <div class="breakdown-row" id="green-spot-row">
+                            <span class="breakdown-label">Spot</span>
+                            <span class="breakdown-value" id="green-spot">0</span>
+                        </div>
+                        <div class="breakdown-row" id="green-catch-row">
+                            <span class="breakdown-label">Catch</span>
+                            <span class="breakdown-value" id="green-catch">0</span>
+                        </div>
+                        <div class="breakdown-row" id="green-penalty-row">
+                            <span class="breakdown-label">Penalty</span>
+                            <span class="breakdown-value" id="green-penalty">0</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Divider -->
+                <div class="score-divider">
+                    <div class="divider-vs">VS</div>
+                </div>
+
+                <!-- Yellow Team -->
+                <div class="team-column yellow-column">
+                    <div class="team-name" id="yellow-team-name">Yellow</div>
+                    <div class="team-total" id="yellow-total">0</div>
+                    <div class="score-breakdown" id="yellow-breakdown">
+                        <div class="breakdown-row" id="yellow-hit-row">
+                            <span class="breakdown-label">Hit</span>
+                            <span class="breakdown-value" id="yellow-hit">0</span>
+                        </div>
+                        <div class="breakdown-row" id="yellow-spot-row">
+                            <span class="breakdown-label">Spot</span>
+                            <span class="breakdown-value" id="yellow-spot">0</span>
+                        </div>
+                        <div class="breakdown-row" id="yellow-catch-row">
+                            <span class="breakdown-label">Catch</span>
+                            <span class="breakdown-value" id="yellow-catch">0</span>
+                        </div>
+                        <div class="breakdown-row" id="yellow-penalty-row">
+                            <span class="breakdown-label">Penalty</span>
+                            <span class="breakdown-value" id="yellow-penalty">0</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Next Game Preview (shown during game) -->
+            <div id="playing-next-game" class="next-game-section hidden">
+                <div class="next-game-header">Up Next</div>
+                <div class="next-game-teams">
+                    <div class="next-team green-next">
+                        <span class="next-label">Green</span>
+                        <span class="next-name" id="playing-next-green">---</span>
+                    </div>
+                    <div class="next-team yellow-next">
+                        <span class="next-label">Yellow</span>
+                        <span class="next-name" id="playing-next-yellow">---</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- FINISHED VIEW: Winner Announcement -->
+        <div id="finished-view" class="hidden">
+            <div class="winner-announcement">
+                <div class="winner-icon" id="winner-icon">&#127942;</div>
+                <div class="winner-title" id="winner-title">Winner!</div>
+                <div class="winner-name" id="winner-name">---</div>
+                <div class="final-score" id="final-score">0 - 0</div>
+                <div class="winner-breakdown" id="winner-breakdown"></div>
+            </div>
+
+            <!-- Next Game Preview (shown after game ends) -->
+            <div id="finished-next-game" class="next-game-section hidden">
+                <div class="next-game-header">Up Next</div>
+                <div class="next-game-teams">
+                    <div class="next-team green-next">
+                        <span class="next-label">Green</span>
+                        <span class="next-name" id="finished-next-green">---</span>
+                    </div>
+                    <div class="next-team yellow-next">
+                        <span class="next-label">Yellow</span>
+                        <span class="next-name" id="finished-next-yellow">---</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- IDLE VIEW: Waiting for game -->
+        <div id="idle-view">
+            <div class="idle-content">
+                <div class="idle-icon">&#9876;</div>
+                <div class="idle-title">Sherwood Adventure Timer</div>
+                <div id="idle-next-game" class="next-game-section">
+                    <div class="next-game-header">Next Game</div>
+                    <div class="next-game-teams">
+                        <div class="next-team green-next">
+                            <span class="next-label">Green</span>
+                            <span class="next-name" id="idle-next-green">---</span>
+                        </div>
+                        <div class="next-team yellow-next">
+                            <span class="next-label">Yellow</span>
+                            <span class="next-name" id="idle-next-yellow">---</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="idle-game-type" id="idle-game-type"></div>
+            </div>
+        </div>
+
+        <!-- TRANSITION VIEW: Countdown / Ready / Instructions -->
+        <div id="transition-view" class="hidden">
+            <div class="transition-content">
+                <div class="transition-icon">&#9201;</div>
+                <div class="transition-text" id="transition-message">Getting Ready...</div>
+                <div class="transition-teams">
+                    <span class="transition-green" id="transition-green-name">Green</span>
+                    <span class="transition-vs">vs</span>
+                    <span class="transition-yellow" id="transition-yellow-name">Yellow</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Connection status -->
+        <div id="connection-status">Connected</div>
+
+    </div>
+
+    <script src="/static/js/socket.io.min.js"></script>
+    <script src="/static/js/scoreboard.js"></script>
+</body>
+</html>

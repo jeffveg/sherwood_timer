@@ -45,6 +45,27 @@ SanctionGameRunTime = 8
 path = join("SherwoodTimer", os.getcwd() )
 if DeBug: print("Program Root " + path + " | SongList " + SongList )
 
+# --- Logging Setup ---
+def setup_logging():
+    log_dir = join(path, 'Gamerecordings')
+    os.makedirs(log_dir, exist_ok=True)
+    _logger = logging.getLogger('sherwood')
+    _logger.setLevel(logging.DEBUG)
+    log_filename = join(log_dir, 'error_' + datetime.now().strftime('%Y-%m-%d') + '.log')
+    fh = logging.FileHandler(log_filename)
+    fh.setLevel(logging.ERROR)
+    fh.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s',
+                                       datefmt='%Y-%m-%d %H:%M:%S'))
+    ch = logging.StreamHandler()
+    ch.setLevel(logging.ERROR)
+    ch.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s',
+                                       datefmt='%Y-%m-%d %H:%M:%S'))
+    _logger.addHandler(fh)
+    _logger.addHandler(ch)
+    return _logger
+
+logger = setup_logging()
+
 # Defaults
 HoldIt           = datetime.now()
 DelayScreen      = datetime.now() - timedelta(seconds = 20)
@@ -59,17 +80,28 @@ CurrentVid       = "Startup"
 CurrentGameType  = "Elimination"
 BackgroundMusic  = True
 BackgroundVol    = .25
+OutdoorMode      = False
 AutoInst         = False 
 APIIitegration   = False
 AnnouncedOvertime = False
 
-ScoreValues = {
+NormalScoreValues = {
 "Hit"       : 1,
 "Catch"     : 2,
 "Spot"      : 1,
 "Penalty"   : -1,
 "ExtraPoint": 1
 }
+
+TournamentScoreValues = {
+"Hit"       : 1,
+"Catch"     : 3,
+"Spot"      : 0,
+"Penalty"   : -2,
+"ExtraPoint": 0
+}
+
+ScoreValues = dict(NormalScoreValues)
 
 #Define score buckets
 GreenScores = {
@@ -226,23 +258,51 @@ class TTSThread(threading.Thread):
         self.start()
 
     def run(self):
-        tts_engine = pyttsx3.init()
-        tts_engine.startLoop(False)
-        voices = tts_engine.getProperty("voices")
-        tts_engine.setProperty("voice", voices[1].id)
-        rate = tts_engine.getProperty("rate")   # getting details of current speaking rate
-        tts_engine.setProperty("rate", 150)  
-        t_running = True
-        while t_running:
-            if self.queue.empty():
-                tts_engine.iterate()
-            else:
-                data = self.queue.get()
-                if data == "exit":
-                    t_running = False
-                else:
-                    tts_engine.say(data)
-        tts_engine.endLoop()
+        try:
+            tts_engine = pyttsx3.init()
+            tts_engine.startLoop(False)
+            voices = tts_engine.getProperty("voices")
+            if len(voices) > 1:
+                tts_engine.setProperty("voice", voices[1].id)
+            elif len(voices) > 0:
+                tts_engine.setProperty("voice", voices[0].id)
+            tts_engine.setProperty("rate", 150)
+
+            # Volume ducking callbacks — lower music when TTS speaks
+            def on_start(name):
+                try:
+                    pygame.mixer.music.set_volume(0.15)
+                except Exception:
+                    pass
+
+            def on_end(name, completed):
+                try:
+                    if GameRunning == "Playing":
+                        pygame.mixer.music.set_volume(1.0)
+                    else:
+                        pygame.mixer.music.set_volume(BackgroundVol)
+                except Exception:
+                    pass
+
+            tts_engine.connect('started-utterance', on_start)
+            tts_engine.connect('finished-utterance', on_end)
+
+            t_running = True
+            while t_running:
+                try:
+                    if self.queue.empty():
+                        tts_engine.iterate()
+                    else:
+                        data = self.queue.get()
+                        if data == "exit":
+                            t_running = False
+                        else:
+                            tts_engine.say(data)
+                except Exception as error:
+                    logger.error("TTS iteration error: %s", error)
+            tts_engine.endLoop()
+        except Exception as error:
+            logger.error("TTS engine initialization failed: %s", error)
 
 
 # Thread for score Web (Flask + SocketIO)
@@ -272,6 +332,14 @@ class WebGameThread(threading.Thread):
         def index():
             return render_template('index.html')
 
+        @self.app.route('/scoreboard')
+        def scoreboard():
+            return render_template('scoreboard.html')
+
+        @self.app.route('/admin')
+        def admin():
+            return render_template('admin.html')
+
         @self.app.route('/favicon.ico')
         def favicon():
             return send_from_directory(join(path, 'web'), 'favicon.ico', mimetype='image/x-icon')
@@ -295,6 +363,10 @@ class WebGameThread(threading.Thread):
                 success = True
             elif action == 'START' and GameRunning in ("No", "Finished"):
                 StartGame()
+                success = True
+            elif action == 'EARLYWIN' and GameRunning == "Playing" and CurrentGameType == "Elimination":
+                pygame.mixer.Sound.play(EarlyWin)
+                EarlyWinGameEnd()
                 success = True
             elif GameRunning == "Playing":
                 score_map = {
@@ -330,6 +402,56 @@ class WebGameThread(threading.Thread):
         def handle_request_state():
             emit('state_update', self._get_full_state())
 
+        @self.socketio.on('admin_update')
+        def handle_admin_update(data):
+            global ScoreValues, SongList, DefaultGameRunTime, SanctionGameRunTime, GameRunTime, OutdoorMode
+            setting = data.get('setting', '')
+            value = data.get('value')
+            success = False
+            try:
+                if setting == 'scoreHit':
+                    ScoreValues['Hit'] = int(value)
+                    success = True
+                elif setting == 'scoreCatch':
+                    ScoreValues['Catch'] = int(value)
+                    success = True
+                elif setting == 'scoreSpot':
+                    ScoreValues['Spot'] = int(value)
+                    success = True
+                elif setting == 'scorePenalty':
+                    ScoreValues['Penalty'] = int(value)
+                    success = True
+                elif setting == 'scoreExtra':
+                    ScoreValues['ExtraPoint'] = int(value)
+                    success = True
+                elif setting == 'songList':
+                    songDir = join(path, 'SongList', str(value))
+                    if os.path.isdir(songDir):
+                        SongList = 'SongList/' + str(value)
+                        success = True
+                elif setting == 'defaultRunTime':
+                    val = int(value)
+                    if val > 0:
+                        DefaultGameRunTime = val
+                        # Update current GameRunTime if applicable
+                        if CurrentGameType in ("Normal", "Tournament", "Elimination"):
+                            GameRunTime = DefaultGameRunTime
+                        success = True
+                elif setting == 'sanctionRunTime':
+                    val = int(value)
+                    if val > 0:
+                        SanctionGameRunTime = val
+                        if CurrentGameType == "Sanction":
+                            GameRunTime = SanctionGameRunTime
+                        success = True
+                elif setting == 'outdoorMode':
+                    OutdoorMode = bool(value)
+                    success = True
+            except (ValueError, TypeError):
+                success = False
+            emit('admin_ack', {'setting': setting, 'success': success})
+            self.socketio.emit('state_update', self._get_full_state())
+
     def broadcast_state(self):
         """Called from main loop to push state to all connected clients."""
         self.socketio.emit('state_update', self._get_full_state())
@@ -348,6 +470,8 @@ class WebGameThread(threading.Thread):
                 'YellowTeamName': CurrentGame.get('YellowTeamName', ''),
                 'GameType': CurrentGame.get('GameType', ''),
                 'GameStatus': CurrentGame.get('GameStatus', ''),
+                'GameWinner': CurrentGame.get('GameWinner', ''),
+                'GameEarlyStopReason': CurrentGame.get('GameEarlyStopReason', ''),
             },
             'nextGame': {
                 'GameNumber': NextGame.get('GameNumber', 0),
@@ -358,6 +482,13 @@ class WebGameThread(threading.Thread):
             'backgroundVol': int(BackgroundVol * 100),
             'autoInst': AutoInst,
             'apiIntegration': APIIitegration,
+            'scoreValues': dict(ScoreValues),
+            'songList': SongList,
+            'defaultGameRunTime': DefaultGameRunTime,
+            'sanctionGameRunTime': SanctionGameRunTime,
+            'songListOptions': sorted([d for d in os.listdir(join(path, 'SongList'))
+                                       if os.path.isdir(join(path, 'SongList', d))]),
+            'outdoorMode': OutdoorMode,
         }
 
     def run(self):
@@ -370,9 +501,9 @@ def GetNextGame(MinGameNumber=-1):
     global NextGame
     global CurrentGameType
     global GameRunTime
+    conn = None
     try:
         conn = sqlite3.connect(database)
-    
         cur = conn.cursor()
         cur.execute("Select min(GameNumber) from Games where GameStatus = 'Not Started' and GameNumber > ?;",(MinGameNumber,) )
         row = cur.fetchone()
@@ -396,17 +527,10 @@ def GetNextGame(MinGameNumber=-1):
                         + ", ScheduledStartTime" \
                     + " from Games where GameNumber = ?;", (GameNum,) )
         row = cur.fetchone()
-    except Exception as error:
-        print("Database Error: Could not get game - ",error)
-        GameNum = -1
-        NextGame["GameNumber"] = -1        
-        NextGame["GreenTeamName"] = "Green"
-        NextGame["YellowTeamName"] = "Yellow"
-        NextGame["GameType"] = "Normal"
-    else:
-        NextGame["GameNumber"] = row[0]        
+
+        NextGame["GameNumber"] = row[0]
         NextGame["AltGameNum"] = row[1]
-        NextGame["AltTournmentSystem"] = row[2] 
+        NextGame["AltTournmentSystem"] = row[2]
         NextGame["GreenTeamName"] = row[3]
         NextGame["GreenTeamNum"] = row[4]
         NextGame["AltGreenTeamNum"] = row[5]
@@ -414,23 +538,35 @@ def GetNextGame(MinGameNumber=-1):
         NextGame["YellowTeamNum"] = row[7]
         NextGame["AltYellowTeamNum"] = row[8]
         NextGame["GameType"] = row[9]
-        NextGame["ScheduledStartTime"] = row[10] 
-        
-    try:
-        cur.execute("Select count(*) from Scores where Side = 'Yellow' and GameNumber = ?;", (GameNum,))
-        row = cur.fetchone()
-        if row[0] == 0:
-            cur.execute("INSERT INTO Scores (GameNumber,Side) VALUES (?,'Yellow');", (GameNum,))
-            conn.commit()
-        cur.execute("Select count(*) from Scores where Side = 'Green' and GameNumber = ?;", (GameNum,))
-        row = cur.fetchone()
-        if row[0] == 0:
-            cur.execute("INSERT INTO Scores (GameNumber,Side) VALUES (?,'Green');", (GameNum,))
-            conn.commit()
-    except Exception as error:
-        print("Database Error: Checking Score Record exists - ", error)
+        NextGame["ScheduledStartTime"] = row[10]
 
-    conn.close()
+        # Ensure score records exist
+        try:
+            cur.execute("Select count(*) from Scores where Side = 'Yellow' and GameNumber = ?;", (GameNum,))
+            row = cur.fetchone()
+            if row[0] == 0:
+                cur.execute("INSERT INTO Scores (GameNumber,Side) VALUES (?,'Yellow');", (GameNum,))
+                conn.commit()
+            cur.execute("Select count(*) from Scores where Side = 'Green' and GameNumber = ?;", (GameNum,))
+            row = cur.fetchone()
+            if row[0] == 0:
+                cur.execute("INSERT INTO Scores (GameNumber,Side) VALUES (?,'Green');", (GameNum,))
+                conn.commit()
+        except Exception as error:
+            logger.error("Database Error: Checking Score Record exists - %s", error)
+
+    except Exception as error:
+        logger.error("Database Error: Could not get game - %s", error)
+        NextGame["GameNumber"] = -1
+        NextGame["GreenTeamName"] = "Green"
+        NextGame["YellowTeamName"] = "Yellow"
+        NextGame["GameType"] = "Normal"
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
     if DeBug: 
         print("Next Game:")
         print(NextGame)
@@ -438,16 +574,25 @@ def GetNextGame(MinGameNumber=-1):
     CurrentGameType = NextGame.get("GameType")
     if CurrentGameType == "Normal":
         GameRunTime = DefaultGameRunTime
+        ScoreValues.update(NormalScoreValues)
+
+    elif CurrentGameType == "Tournament":
+        GameRunTime = DefaultGameRunTime
+        ScoreValues.update(TournamentScoreValues)
 
     elif CurrentGameType == "Elimination":
         GameRunTime = DefaultGameRunTime
+        ScoreValues.update(NormalScoreValues)
 
     elif CurrentGameType == "Sanction":
         GameRunTime = SanctionGameRunTime
+        ScoreValues.update(NormalScoreValues)
     else:
-        GameRunTime = DefaultGameRunTime     
+        GameRunTime = DefaultGameRunTime
+        ScoreValues.update(NormalScoreValues)
 
 def WriteGameToDB():
+    conn = None
     try:
         conn = sqlite3.connect(database)
         cur = conn.cursor()
@@ -579,9 +724,14 @@ def WriteGameToDB():
                     )
         conn.commit()
     except Exception as error:
-        print("Databse Error: Saving Game - ",error)
+        logger.error("Database Error: Saving Game - %s", error)
         return 0
-    conn.close()
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
     return 1
 
 #Define a get files function
@@ -630,12 +780,12 @@ def Green_Hit_Down():
     pygame.mixer.Sound.play(Ding)  
 
 def Green_Catch_Up():
-    if CurrentGameType in ("Elimination","Sanction"):
+    if CurrentGameType in ("Elimination","Sanction","Tournament"):
         ChangeScore(GreenScores,"Catch","Up")
         pygame.mixer.Sound.play(Ding)  
 
 def Green_Catch_Down():
-    if CurrentGameType in ("Elimination","Sanction"):
+    if CurrentGameType in ("Elimination","Sanction","Tournament"):
         ChangeScore(GreenScores,"Catch","Down")
         pygame.mixer.Sound.play(Buzzer)
 
@@ -650,12 +800,12 @@ def Green_Spot_Down():
         pygame.mixer.Sound.play(Buzzer)
 
 def Green_Penalty_Up():
-    if CurrentGameType in ("Elimination","Sanction"):
+    if CurrentGameType in ("Elimination","Sanction","Tournament"):
         ChangeScore(GreenScores,"Penalty","Up")
         pygame.mixer.Sound.play(Buzzer)
 
 def Green_Penalty_Down():
-    if CurrentGameType in ("Elimination","Sanction"):
+    if CurrentGameType in ("Elimination","Sanction","Tournament"):
         ChangeScore(GreenScores,"Penalty","Down")
         pygame.mixer.Sound.play(Ding)
     
@@ -668,12 +818,12 @@ def Yellow_Hit_Down():
     pygame.mixer.Sound.play(Ding)
 
 def Yellow_Catch_Up():
-    if CurrentGameType in ("Elimination","Sanction"):
+    if CurrentGameType in ("Elimination","Sanction","Tournament"):
         ChangeScore(YellowScores,"Catch","Up")
         pygame.mixer.Sound.play(Ding)
 
 def Yellow_Catch_Down():
-    if CurrentGameType in ("Elimination","Sanction"):
+    if CurrentGameType in ("Elimination","Sanction","Tournament"):
         ChangeScore(YellowScores,"Catch","Down")
         pygame.mixer.Sound.play(Buzzer)
 
@@ -688,12 +838,12 @@ def Yellow_Spot_Down():
         pygame.mixer.Sound.play(Buzzer)
 
 def Yellow_Penalty_Up():
-    if CurrentGameType in ("Elimination","Sanction"):
+    if CurrentGameType in ("Elimination","Sanction","Tournament"):
         ChangeScore(YellowScores,"Penalty","Up")
         pygame.mixer.Sound.play(Buzzer)
 
 def Yellow_Penalty_Down():
-    if CurrentGameType in ("Elimination","Sanction"):
+    if CurrentGameType in ("Elimination","Sanction","Tournament"):
         ChangeScore(YellowScores,"Penalty","Down")
         pygame.mixer.Sound.play(Ding)
 
@@ -790,36 +940,40 @@ def getRandomSong():
     global SongList
     global SongData
 
-    fullPath = join(path,SongList)
-    # Check if directory actually exists
-    if not os.path.exists(fullPath):
+    try:
+        fullPath = join(path,SongList)
+        # Check if directory actually exists
+        if not os.path.exists(fullPath):
+            return None
+            # Find all videos in top-level of directory
+        files = [ os.path.join(fullPath, fn) for fn in next(os.walk(fullPath))[2] ]
+
+        # Return None if we couldn't find any videos
+        if len(files) == 0:
+            return None
+
+        # Make a new list for played content of this type if it does not exist
+        if played.get(SongList) is None:
+            played[SongList] = []
+
+        # Remove any videos we might have already played
+        unduped = [f for f in files if f not in played[SongList]]
+        if len(unduped) == 0:
+            played[SongList] = []
+            unduped = files
+
+        # Choose a random video from the list of unplayed videos
+        choice = random.choice(unduped)
+
+        # Add that choice to the played video list
+        played[SongList].append(choice)
+        if DeBug: print(choice)
+        # Return our video choice
+        SongData = TinyTag.get(choice)
+        return choice
+    except Exception as error:
+        logger.error("getRandomSong error: %s", error)
         return None
-        # Find all videos in top-level of directory
-    files = [ os.path.join(fullPath, fn) for fn in next(os.walk(fullPath))[2] ]
-
-    # Return None if we couldn't find any videos
-    if len(files) == 0:
-        return None
-
-    # Make a new list for played content of this type if it does not exist
-    if played.get(SongList) is None:
-        played[SongList] = []
-
-    # Remove any videos we might have already played
-    unduped = [f for f in files if f not in played[SongList]]
-    if len(unduped) == 0:
-        played[SongList] = []
-        unduped = files
-
-    # Choose a random video from the list of unplayed videos
-    choice = random.choice(unduped)
-
-    # Add that choice to the played video list
-    played[SongList].append(choice)
-    if DeBug: print(choice)
-    # Return our video choice
-    SongData = TinyTag.get(choice) 
-    return choice
 
 def NextToCurrentGame():
     global CurrentGame
@@ -932,10 +1086,16 @@ def ButtonPressed(channel):
             PlayAVideo(CurrentVid)
         
         #Configuration Controls
-        elif channel == pygame.K_5: # Configure Elimination Game
+        elif channel == pygame.K_5: # Configure Game Type
             if CurrentGameType == "Normal":
+                CurrentGameType = "Tournament"
+                GameRunTime = DefaultGameRunTime
+                ScoreValues.update(TournamentScoreValues)
+
+            elif CurrentGameType == "Tournament":
                 CurrentGameType = "Elimination"
                 GameRunTime = DefaultGameRunTime
+                ScoreValues.update(NormalScoreValues)
 
             elif CurrentGameType == "Elimination":
                 CurrentGameType = "Sanction"
@@ -946,7 +1106,8 @@ def ButtonPressed(channel):
                 GameRunTime = DefaultGameRunTime
             else:
                 CurrentGameType = "Normal"
-                GameRunTime = DefaultGameRunTime   
+                GameRunTime = DefaultGameRunTime
+                ScoreValues.update(NormalScoreValues)
             SpeakIt.put(CurrentGameType)
 
 
@@ -1081,7 +1242,7 @@ def DrawScoreBoard():
                 Text = str(GreenScores.get("Total")) + " to " +  str(YellowScores.get("Total"))
             GameInfo.render_to(screen,(x + indent,y), "Total " + Text, (FontColor))
             y = y + ls
-            if CurrentGameType in ("Elimination","Sanction"):
+            if CurrentGameType in ("Elimination","Sanction","Tournament"):
                 Text = ""
                 if CurrentGame.get("GameWinner") == "Yellow":
                     if CurrentGameType in ("Elimination"):

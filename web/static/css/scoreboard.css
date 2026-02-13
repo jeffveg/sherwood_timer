@@ -1,0 +1,644 @@
+/* ==========================================
+   Sherwood Adventure Timer - Spectator Scoreboard
+   Display-only layout for monitors/tablets/TVs
+   ========================================== */
+
+/* Reset & Base */
+*, *::before, *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+html {
+    font-size: 16px;
+    height: 100%;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #0f0f23;
+    color: #ffffff;
+    min-height: 100%;
+    overflow: hidden;
+    user-select: none;
+}
+
+#scoreboard {
+    width: 100vw;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+}
+
+.hidden {
+    display: none !important;
+}
+
+/* ==========================================
+   Game Type Badge
+   ========================================== */
+#game-type-badge {
+    position: absolute;
+    top: 16px;
+    right: 20px;
+    font-size: 1rem;
+    font-weight: 600;
+    padding: 6px 16px;
+    border-radius: 20px;
+    background: rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.7);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+/* ==========================================
+   Playing View: Timer + Score Columns
+   ========================================== */
+#playing-view {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 20px 40px;
+}
+
+/* Timer */
+#timer-container {
+    width: 100%;
+    text-align: center;
+    padding: 20px 0 10px;
+    flex-shrink: 0;
+}
+
+#timer-display {
+    font-size: 10rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.02em;
+    line-height: 1;
+    color: #ffffff;
+    transition: color 0.3s ease;
+}
+
+#timer-display.overtime {
+    color: #ef4444;
+    animation: timerPulse 1s ease-in-out infinite;
+}
+
+#timer-display.paused {
+    animation: timerBlink 1s ease-in-out infinite;
+}
+
+@keyframes timerPulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.8; transform: scale(1.02); }
+}
+
+@keyframes timerBlink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+}
+
+/* Score Columns Container */
+#score-columns {
+    flex: 1;
+    width: 100%;
+    display: flex;
+    align-items: stretch;
+    justify-content: center;
+    gap: 0;
+    min-height: 0;
+}
+
+/* Individual Team Column */
+.team-column {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    padding: 20px 20px;
+    border-radius: 16px;
+    max-width: 45%;
+}
+
+.green-column {
+    background: rgba(21, 128, 61, 0.15);
+    border: 2px solid rgba(21, 128, 61, 0.3);
+}
+
+.yellow-column {
+    background: rgba(202, 138, 4, 0.15);
+    border: 2px solid rgba(202, 138, 4, 0.3);
+}
+
+/* Team Name */
+.team-name {
+    font-size: 2.2rem;
+    font-weight: 700;
+    margin-bottom: 10px;
+    text-align: center;
+    word-break: break-word;
+    line-height: 1.1;
+}
+
+.green-column .team-name { color: #4ade80; }
+.yellow-column .team-name { color: #fbbf24; }
+
+/* Total Score */
+.team-total {
+    font-size: 8rem;
+    font-weight: 800;
+    line-height: 1;
+    margin-bottom: 10px;
+    font-variant-numeric: tabular-nums;
+}
+
+.green-column .team-total { color: #4ade80; }
+.yellow-column .team-total { color: #fbbf24; }
+
+/* Score Breakdown */
+.score-breakdown {
+    width: 100%;
+    max-width: 280px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.breakdown-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 14px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+    font-size: 1.3rem;
+}
+
+.breakdown-label {
+    color: rgba(255, 255, 255, 0.6);
+    font-weight: 500;
+}
+
+.breakdown-value {
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: #ffffff;
+}
+
+/* Score Divider */
+.score-divider {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 60px;
+    flex-shrink: 0;
+}
+
+.divider-vs {
+    font-size: 2rem;
+    font-weight: 700;
+    color: rgba(255, 255, 255, 0.3);
+}
+
+/* Next game in playing view - compact at bottom */
+#playing-next-game {
+    flex-shrink: 0;
+    padding: 8px 0;
+}
+
+#playing-next-game .next-game-header {
+    font-size: 1rem;
+    margin-bottom: 6px;
+}
+
+#playing-next-game .next-name {
+    font-size: 1.2rem;
+}
+
+#playing-next-game .next-team {
+    padding: 6px 16px;
+    min-width: 100px;
+}
+
+/* ==========================================
+   Finished View: Winner Announcement
+   ========================================== */
+#finished-view {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px;
+    animation: fadeIn 0.5s ease-out;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.winner-announcement {
+    text-align: center;
+    margin-bottom: 40px;
+}
+
+.winner-icon {
+    font-size: 5rem;
+    margin-bottom: 10px;
+}
+
+.winner-title {
+    font-size: 2.5rem;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.7);
+    margin-bottom: 8px;
+}
+
+.winner-name {
+    font-size: 4rem;
+    font-weight: 800;
+    margin-bottom: 16px;
+    line-height: 1.1;
+}
+
+.winner-name.green-winner { color: #4ade80; }
+.winner-name.yellow-winner { color: #fbbf24; }
+.winner-name.draw-result { color: #ffffff; }
+
+.final-score {
+    font-size: 3rem;
+    font-weight: 700;
+    color: rgba(255, 255, 255, 0.8);
+    margin-bottom: 20px;
+}
+
+.winner-breakdown {
+    display: inline-flex;
+    gap: 20px;
+    font-size: 1.2rem;
+    color: rgba(255, 255, 255, 0.6);
+}
+
+.winner-breakdown .wb-item {
+    padding: 4px 12px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 6px;
+}
+
+/* ==========================================
+   Next Game Section (used in Finished + Idle)
+   ========================================== */
+.next-game-section {
+    width: 100%;
+    max-width: 600px;
+    text-align: center;
+}
+
+.next-game-header {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.5);
+    margin-bottom: 16px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+}
+
+.next-game-teams {
+    display: flex;
+    justify-content: center;
+    gap: 40px;
+}
+
+.next-team {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 12px 24px;
+    border-radius: 12px;
+    min-width: 140px;
+}
+
+.green-next {
+    background: rgba(21, 128, 61, 0.15);
+    border: 2px solid rgba(21, 128, 61, 0.3);
+}
+
+.yellow-next {
+    background: rgba(202, 138, 4, 0.15);
+    border: 2px solid rgba(202, 138, 4, 0.3);
+}
+
+.next-label {
+    font-size: 1rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.green-next .next-label { color: #4ade80; }
+.yellow-next .next-label { color: #fbbf24; }
+
+.next-name {
+    font-size: 1.8rem;
+    font-weight: 700;
+    color: #ffffff;
+}
+
+/* ==========================================
+   Idle View: Waiting for game
+   ========================================== */
+#idle-view {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.idle-content {
+    text-align: center;
+}
+
+.idle-icon {
+    font-size: 5rem;
+    margin-bottom: 16px;
+    opacity: 0.6;
+}
+
+.idle-title {
+    font-size: 3rem;
+    font-weight: 700;
+    margin-bottom: 40px;
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.idle-game-type {
+    margin-top: 20px;
+    font-size: 1.2rem;
+    color: rgba(255, 255, 255, 0.4);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+}
+
+/* ==========================================
+   Transition View: Countdown / Instructions
+   ========================================== */
+#transition-view {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.transition-content {
+    text-align: center;
+}
+
+.transition-icon {
+    font-size: 5rem;
+    margin-bottom: 16px;
+    animation: timerBlink 1.5s ease-in-out infinite;
+}
+
+.transition-text {
+    font-size: 2.5rem;
+    font-weight: 600;
+    margin-bottom: 24px;
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.transition-teams {
+    font-size: 2rem;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+}
+
+.transition-green { color: #4ade80; }
+.transition-yellow { color: #fbbf24; }
+.transition-vs {
+    color: rgba(255, 255, 255, 0.3);
+    font-weight: 400;
+}
+
+/* ==========================================
+   Connection Status
+   ========================================== */
+#connection-status {
+    position: absolute;
+    bottom: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 0.8rem;
+    color: rgba(255, 255, 255, 0.3);
+    padding: 4px 12px;
+    border-radius: 10px;
+    transition: all 0.3s ease;
+}
+
+#connection-status.disconnected {
+    background: rgba(239, 68, 68, 0.2);
+    color: #ef4444;
+    font-weight: 600;
+}
+
+/* ==========================================
+   Light / Outdoor Theme Overrides
+   ========================================== */
+body[data-theme="light"] {
+    background: #f0f0f0;
+    color: #1a1a1a;
+}
+
+body[data-theme="light"] #game-type-badge {
+    background: rgba(0, 0, 0, 0.08);
+    color: #555555;
+}
+
+body[data-theme="light"] #timer-display {
+    color: #1a1a1a;
+}
+
+body[data-theme="light"] #timer-display.overtime {
+    color: #dc2626;
+}
+
+body[data-theme="light"] .green-column {
+    background: rgba(21, 128, 61, 0.1);
+    border-color: rgba(21, 128, 61, 0.25);
+}
+
+body[data-theme="light"] .yellow-column {
+    background: rgba(202, 138, 4, 0.1);
+    border-color: rgba(202, 138, 4, 0.25);
+}
+
+body[data-theme="light"] .green-column .team-name { color: #15803d; }
+body[data-theme="light"] .yellow-column .team-name { color: #a16207; }
+
+body[data-theme="light"] .green-column .team-total { color: #15803d; }
+body[data-theme="light"] .yellow-column .team-total { color: #a16207; }
+
+body[data-theme="light"] .breakdown-row {
+    background: rgba(0, 0, 0, 0.05);
+}
+
+body[data-theme="light"] .breakdown-label {
+    color: #666666;
+}
+
+body[data-theme="light"] .breakdown-value {
+    color: #1a1a1a;
+}
+
+body[data-theme="light"] .divider-vs {
+    color: rgba(0, 0, 0, 0.2);
+}
+
+body[data-theme="light"] .winner-title {
+    color: #555555;
+}
+
+body[data-theme="light"] .winner-name.green-winner { color: #15803d; }
+body[data-theme="light"] .winner-name.yellow-winner { color: #a16207; }
+body[data-theme="light"] .winner-name.draw-result { color: #1a1a1a; }
+
+body[data-theme="light"] .final-score {
+    color: #333333;
+}
+
+body[data-theme="light"] .winner-breakdown {
+    color: #555555;
+}
+
+body[data-theme="light"] .winner-breakdown .wb-item {
+    background: rgba(0, 0, 0, 0.06);
+}
+
+body[data-theme="light"] .next-game-header {
+    color: #777777;
+}
+
+body[data-theme="light"] .green-next {
+    background: rgba(21, 128, 61, 0.1);
+    border-color: rgba(21, 128, 61, 0.25);
+}
+
+body[data-theme="light"] .yellow-next {
+    background: rgba(202, 138, 4, 0.1);
+    border-color: rgba(202, 138, 4, 0.25);
+}
+
+body[data-theme="light"] .green-next .next-label { color: #15803d; }
+body[data-theme="light"] .yellow-next .next-label { color: #a16207; }
+
+body[data-theme="light"] .next-name {
+    color: #1a1a1a;
+}
+
+body[data-theme="light"] .idle-title {
+    color: #333333;
+}
+
+body[data-theme="light"] .idle-game-type {
+    color: #888888;
+}
+
+body[data-theme="light"] .transition-text {
+    color: #333333;
+}
+
+body[data-theme="light"] .transition-green { color: #15803d; }
+body[data-theme="light"] .transition-yellow { color: #a16207; }
+body[data-theme="light"] .transition-vs { color: rgba(0, 0, 0, 0.2); }
+
+body[data-theme="light"] #connection-status {
+    color: #999999;
+}
+
+body[data-theme="light"] #connection-status.disconnected {
+    background: rgba(239, 68, 68, 0.15);
+    color: #dc2626;
+}
+
+/* ==========================================
+   Responsive: Smaller screens
+   ========================================== */
+@media (max-width: 900px) {
+    #timer-display {
+        font-size: 6rem;
+    }
+    .team-total {
+        font-size: 5rem;
+    }
+    .team-name {
+        font-size: 1.6rem;
+    }
+    .breakdown-row {
+        font-size: 1rem;
+    }
+    .winner-name {
+        font-size: 3rem;
+    }
+    .final-score {
+        font-size: 2rem;
+    }
+    .idle-title {
+        font-size: 2rem;
+    }
+    #playing-view {
+        padding: 10px 16px;
+    }
+    .team-column {
+        padding: 14px 12px;
+    }
+}
+
+@media (max-width: 600px) {
+    #timer-display {
+        font-size: 4rem;
+    }
+    .team-total {
+        font-size: 3.5rem;
+    }
+    .team-name {
+        font-size: 1.2rem;
+    }
+    .breakdown-row {
+        font-size: 0.9rem;
+        padding: 4px 10px;
+    }
+    .score-divider {
+        width: 30px;
+    }
+    .divider-vs {
+        font-size: 1.2rem;
+    }
+    .winner-name {
+        font-size: 2rem;
+    }
+    .next-name {
+        font-size: 1.3rem;
+    }
+    .idle-title {
+        font-size: 1.5rem;
+    }
+    #game-type-badge {
+        font-size: 0.75rem;
+        top: 8px;
+        right: 10px;
+    }
+}

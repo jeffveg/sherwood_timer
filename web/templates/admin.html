@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>Admin - Sherwood Adventure Timer</title>
+    <link rel="stylesheet" href="/static/css/admin.css">
+</head>
+<body>
+
+    <div id="admin">
+        <a href="/" class="nav-link">&larr; Back to Controls</a>
+        <header>
+            <h1>Admin Settings</h1>
+            <p class="subtitle">Changes reset on restart</p>
+            <div id="connection-status">Connected</div>
+            <div class="theme-toggle-wrapper">
+                <label class="theme-toggle" for="theme-switch">
+                    <span class="toggle-label-dark">Dark</span>
+                    <input type="checkbox" id="theme-switch">
+                    <span class="toggle-slider"></span>
+                    <span class="toggle-label-light">Light</span>
+                </label>
+            </div>
+        </header>
+
+        <!-- Score Values Section (collapsible, hidden by default) -->
+        <section class="settings-section">
+            <h2 class="collapsible-header" id="score-values-toggle">Score Values <span class="toggle-arrow">&#9654;</span></h2>
+            <div id="score-values-body" class="collapsible-body hidden">
+                <div class="setting-row">
+                    <label>Hit</label>
+                    <div class="stepper">
+                        <button class="step-btn step-down" data-setting="scoreHit" data-dir="down">−</button>
+                        <span class="step-value" id="val-scoreHit">1</span>
+                        <button class="step-btn step-up" data-setting="scoreHit" data-dir="up">+</button>
+                    </div>
+                </div>
+                <div class="setting-row">
+                    <label>Catch</label>
+                    <div class="stepper">
+                        <button class="step-btn step-down" data-setting="scoreCatch" data-dir="down">−</button>
+                        <span class="step-value" id="val-scoreCatch">2</span>
+                        <button class="step-btn step-up" data-setting="scoreCatch" data-dir="up">+</button>
+                    </div>
+                </div>
+                <div class="setting-row">
+                    <label>Spot</label>
+                    <div class="stepper">
+                        <button class="step-btn step-down" data-setting="scoreSpot" data-dir="down">−</button>
+                        <span class="step-value" id="val-scoreSpot">1</span>
+                        <button class="step-btn step-up" data-setting="scoreSpot" data-dir="up">+</button>
+                    </div>
+                </div>
+                <div class="setting-row">
+                    <label>Penalty</label>
+                    <div class="stepper">
+                        <button class="step-btn step-down" data-setting="scorePenalty" data-dir="down">−</button>
+                        <span class="step-value" id="val-scorePenalty">-1</span>
+                        <button class="step-btn step-up" data-setting="scorePenalty" data-dir="up">+</button>
+                    </div>
+                </div>
+                <div class="setting-row">
+                    <label>Extra Point</label>
+                    <div class="stepper">
+                        <button class="step-btn step-down" data-setting="scoreExtra" data-dir="down">−</button>
+                        <span class="step-value" id="val-scoreExtra">1</span>
+                        <button class="step-btn step-up" data-setting="scoreExtra" data-dir="up">+</button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Music Section -->
+        <section class="settings-section">
+            <h2>Music</h2>
+            <div class="setting-row">
+                <label>Song List</label>
+                <select id="songlist-select">
+                    <option value="">Loading...</option>
+                </select>
+            </div>
+        </section>
+
+        <!-- Timers Section -->
+        <section class="settings-section">
+            <h2>Timers <span class="unit">(minutes)</span></h2>
+            <div class="setting-row">
+                <label>Default</label>
+                <div class="stepper">
+                    <button class="step-btn step-down" data-setting="defaultRunTime" data-dir="down">−</button>
+                    <span class="step-value" id="val-defaultRunTime">5</span>
+                    <button class="step-btn step-up" data-setting="defaultRunTime" data-dir="up">+</button>
+                </div>
+            </div>
+            <div class="setting-row">
+                <label>Sanction</label>
+                <div class="stepper">
+                    <button class="step-btn step-down" data-setting="sanctionRunTime" data-dir="down">−</button>
+                    <span class="step-value" id="val-sanctionRunTime">8</span>
+                    <button class="step-btn step-up" data-setting="sanctionRunTime" data-dir="up">+</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- Current Game Type Indicator -->
+        <section class="settings-section info-section">
+            <h2>Current Status</h2>
+            <div class="info-row">
+                <span class="info-label">Game Type</span>
+                <span class="info-value" id="info-gameType">---</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">Game State</span>
+                <span class="info-value" id="info-gameState">---</span>
+            </div>
+        </section>
+    </div>
+
+    <script src="/static/js/socket.io.min.js"></script>
+    <script src="/static/js/admin.js"></script>
+</body>
+</html>

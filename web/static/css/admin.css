@@ -1,0 +1,476 @@
+/* ==========================================
+   Sherwood Adventure Timer - Admin Settings
+   ========================================== */
+
+/* Reset & Base */
+*, *::before, *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+html {
+    font-size: 16px;
+    height: 100%;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #0f0f23;
+    color: #ffffff;
+    min-height: 100%;
+    -webkit-tap-highlight-color: transparent;
+}
+
+#admin {
+    max-width: 500px;
+    margin: 0 auto;
+    padding: 20px 16px 40px;
+}
+
+/* Header */
+header {
+    text-align: center;
+    margin-bottom: 24px;
+    position: relative;
+}
+
+header h1 {
+    font-size: 1.6rem;
+    font-weight: 700;
+    margin-bottom: 4px;
+}
+
+.subtitle {
+    font-size: 0.85rem;
+    color: rgba(255, 255, 255, 0.4);
+    font-style: italic;
+}
+
+#connection-status {
+    position: absolute;
+    top: 0;
+    right: 0;
+    font-size: 0.75rem;
+    color: rgba(255, 255, 255, 0.3);
+    padding: 2px 8px;
+    border-radius: 8px;
+}
+
+#connection-status.disconnected {
+    background: rgba(239, 68, 68, 0.2);
+    color: #ef4444;
+    font-weight: 600;
+}
+
+/* Sections */
+.settings-section {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 16px;
+}
+
+.settings-section h2 {
+    font-size: 1rem;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.6);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.settings-section h2 .unit {
+    font-size: 0.8rem;
+    font-weight: 400;
+    text-transform: none;
+    color: rgba(255, 255, 255, 0.35);
+}
+
+/* Setting Row */
+.setting-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 0;
+}
+
+.setting-row + .setting-row {
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.setting-row label {
+    font-size: 1rem;
+    font-weight: 500;
+    color: #ffffff;
+    flex-shrink: 0;
+}
+
+/* Stepper Control */
+.stepper {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.step-btn {
+    width: 48px;
+    height: 44px;
+    border: none;
+    background: transparent;
+    color: #ffffff;
+    font-size: 1.4rem;
+    font-weight: 700;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.step-btn:active {
+    background: rgba(255, 255, 255, 0.15);
+}
+
+.step-down {
+    border-right: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.step-up {
+    border-left: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.step-value {
+    min-width: 48px;
+    text-align: center;
+    font-size: 1.2rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    padding: 0 4px;
+}
+
+/* Dropdown Select */
+select {
+    appearance: none;
+    -webkit-appearance: none;
+    background: rgba(255, 255, 255, 0.08);
+    color: #ffffff;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 10px;
+    padding: 10px 36px 10px 14px;
+    font-size: 1rem;
+    font-weight: 500;
+    cursor: pointer;
+    min-width: 160px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23ffffff' stroke-width='2' fill='none'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+}
+
+select:focus {
+    outline: none;
+    border-color: rgba(255, 255, 255, 0.4);
+}
+
+select option {
+    background: #1a1a2e;
+    color: #ffffff;
+}
+
+/* Info Section */
+.info-section {
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.info-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 0;
+}
+
+.info-row + .info-row {
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.info-label {
+    font-size: 0.9rem;
+    color: rgba(255, 255, 255, 0.5);
+}
+
+.info-value {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #ffffff;
+}
+
+/* Flash feedback */
+.flash-success {
+    animation: flashGreen 0.4s ease-out;
+}
+
+@keyframes flashGreen {
+    0% { background-color: rgba(74, 222, 128, 0.3); }
+    100% { background-color: transparent; }
+}
+
+/* ==========================================
+   Navigation Link
+   ========================================== */
+.nav-link {
+    display: inline-block;
+    color: rgba(255, 255, 255, 0.5);
+    text-decoration: none;
+    font-size: 0.85rem;
+    font-weight: 500;
+    padding: 4px 0;
+    margin-bottom: 8px;
+    transition: color 0.2s;
+}
+
+.nav-link:hover {
+    color: rgba(255, 255, 255, 0.8);
+}
+
+/* ==========================================
+   Collapsible Section
+   ========================================== */
+.collapsible-header {
+    cursor: pointer;
+    user-select: none;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.collapsible-header:hover {
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.toggle-arrow {
+    font-size: 0.75rem;
+    transition: transform 0.2s ease;
+    display: inline-block;
+}
+
+.toggle-arrow.expanded {
+    transform: rotate(90deg);
+}
+
+.collapsible-body.hidden {
+    display: none;
+}
+
+/* ==========================================
+   Theme Toggle Switch
+   ========================================== */
+.theme-toggle-wrapper {
+    margin-top: 8px;
+    display: flex;
+    justify-content: center;
+}
+
+.theme-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    user-select: none;
+    font-size: 0.85rem;
+}
+
+.theme-toggle input {
+    display: none;
+}
+
+.toggle-slider {
+    position: relative;
+    width: 48px;
+    height: 26px;
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 13px;
+    transition: background 0.3s;
+}
+
+.toggle-slider::after {
+    content: '';
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 20px;
+    height: 20px;
+    background: #ffffff;
+    border-radius: 50%;
+    transition: transform 0.3s;
+}
+
+.theme-toggle input:checked + .toggle-slider {
+    background: #f59e0b;
+}
+
+.theme-toggle input:checked + .toggle-slider::after {
+    transform: translateX(22px);
+}
+
+.toggle-label-dark {
+    color: rgba(255, 255, 255, 0.6);
+    font-weight: 600;
+}
+
+.toggle-label-light {
+    color: rgba(255, 255, 255, 0.6);
+    font-weight: 600;
+}
+
+/* ==========================================
+   Light / Outdoor Theme Overrides
+   ========================================== */
+body[data-theme="light"] {
+    background: #f0f0f0;
+    color: #1a1a1a;
+}
+
+body[data-theme="light"] .settings-section {
+    background: #ffffff;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
+}
+
+body[data-theme="light"] .settings-section h2 {
+    color: #555555;
+    border-bottom-color: #e0e0e0;
+}
+
+body[data-theme="light"] .settings-section h2 .unit {
+    color: #888888;
+}
+
+body[data-theme="light"] .setting-row label {
+    color: #1a1a1a;
+}
+
+body[data-theme="light"] .setting-row + .setting-row {
+    border-top-color: #e8e8e8;
+}
+
+body[data-theme="light"] .stepper {
+    background: #e8e8e8;
+}
+
+body[data-theme="light"] .step-btn {
+    color: #1a1a1a;
+}
+
+body[data-theme="light"] .step-btn:active {
+    background: rgba(0, 0, 0, 0.1);
+}
+
+body[data-theme="light"] .step-down {
+    border-right-color: #d0d0d0;
+}
+
+body[data-theme="light"] .step-up {
+    border-left-color: #d0d0d0;
+}
+
+body[data-theme="light"] .step-value {
+    color: #1a1a1a;
+}
+
+body[data-theme="light"] select {
+    background: #e8e8e8 url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23333333' stroke-width='2' fill='none'/%3E%3C/svg%3E") no-repeat right 12px center;
+    background-size: 12px;
+    color: #1a1a1a;
+    border-color: #d0d0d0;
+}
+
+body[data-theme="light"] select option {
+    background: #ffffff;
+    color: #1a1a1a;
+}
+
+body[data-theme="light"] .info-section {
+    background: rgba(0, 0, 0, 0.03);
+}
+
+body[data-theme="light"] .info-row + .info-row {
+    border-top-color: #e8e8e8;
+}
+
+body[data-theme="light"] .info-label {
+    color: #777777;
+}
+
+body[data-theme="light"] .info-value {
+    color: #1a1a1a;
+}
+
+body[data-theme="light"] header h1 {
+    color: #1a1a1a;
+}
+
+body[data-theme="light"] .subtitle {
+    color: #999999;
+}
+
+body[data-theme="light"] #connection-status {
+    color: #999999;
+}
+
+body[data-theme="light"] #connection-status.disconnected {
+    background: rgba(239, 68, 68, 0.15);
+    color: #dc2626;
+}
+
+body[data-theme="light"] .nav-link {
+    color: #888888;
+}
+
+body[data-theme="light"] .nav-link:hover {
+    color: #333333;
+}
+
+body[data-theme="light"] .collapsible-header:hover {
+    color: #333333;
+}
+
+body[data-theme="light"] .toggle-label-dark,
+body[data-theme="light"] .toggle-label-light {
+    color: #555555;
+}
+
+body[data-theme="light"] .toggle-slider {
+    background: #cccccc;
+}
+
+@keyframes flashGreenLight {
+    0% { background-color: rgba(21, 128, 61, 0.2); }
+    100% { background-color: transparent; }
+}
+
+body[data-theme="light"] .flash-success {
+    animation: flashGreenLight 0.4s ease-out;
+}
+
+/* Responsive */
+@media (max-width: 400px) {
+    .setting-row label {
+        font-size: 0.9rem;
+    }
+    .step-btn {
+        width: 40px;
+        height: 38px;
+    }
+    .step-value {
+        min-width: 40px;
+        font-size: 1.1rem;
+    }
+    select {
+        min-width: 130px;
+    }
+}
