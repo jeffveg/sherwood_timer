@@ -3,7 +3,8 @@
     "allow": [
       "Bash(cat:*)",
       "WebFetch(domain:cdn.socket.io)",
-      "Bash(curl:*)"
+      "Bash(curl:*)",
+      "Bash(dir:*)"
     ]
   }
 }

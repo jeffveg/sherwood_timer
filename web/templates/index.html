@@ -124,7 +124,7 @@
                 </div>
             </div>
 
-            <!-- Game Controls: Pause / Stop -->
+            <!-- Game Controls: Pause / Stop / Early Win -->
             <div class="score-section game-controls">
                 <div class="game-controls-grid">
                     <button class="game-ctrl-btn pause-btn" id="pause-btn" data-confirm="PAUSE">
@@ -134,6 +134,10 @@
                     <button class="game-ctrl-btn stop-btn" data-confirm="STOP">
                         <span class="game-ctrl-icon">&#9209;</span>
                         <span class="game-ctrl-label">Stop Game</span>
+                    </button>
+                    <button class="game-ctrl-btn earlywin-btn elim-only-btn" data-confirm="EARLYWIN">
+                        <span class="game-ctrl-icon">&#9733;</span>
+                        <span class="game-ctrl-label">Early Win</span>
                     </button>
                 </div>
             </div>
@@ -201,6 +205,8 @@
                     <span class="ctrl-value" id="vol-val">25</span>
                 </button>
             </div>
+
+            <a href="/admin" class="admin-link">&#9881; Admin Settings</a>
         </main>
 
         <!-- Confirmation Modal -->
