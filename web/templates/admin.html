@@ -16,6 +16,11 @@
             <h1>Admin Settings</h1>
             <p class="subtitle">Changes reset on restart</p>
             <div id="connection-status">Connected</div>
+        </header>
+
+        <!-- Light / Dark Toggle -->
+        <section class="settings-section">
+            <h2>Display Mode</h2>
             <div class="theme-toggle-wrapper">
                 <label class="theme-toggle" for="theme-switch">
                     <span class="toggle-label-dark">Dark</span>
@@ -24,7 +29,39 @@
                     <span class="toggle-label-light">Light</span>
                 </label>
             </div>
-        </header>
+        </section>
+
+        <!-- Music Section -->
+        <section class="settings-section">
+            <h2>Music</h2>
+            <div class="setting-row">
+                <label>Song List</label>
+                <select id="songlist-select">
+                    <option value="">Loading...</option>
+                </select>
+            </div>
+        </section>
+
+        <!-- Timers Section -->
+        <section class="settings-section">
+            <h2>Timers <span class="unit">(minutes)</span></h2>
+            <div class="setting-row">
+                <label>Default</label>
+                <div class="stepper">
+                    <button class="step-btn step-down" data-setting="defaultRunTime" data-dir="down">−</button>
+                    <span class="step-value" id="val-defaultRunTime">5</span>
+                    <button class="step-btn step-up" data-setting="defaultRunTime" data-dir="up">+</button>
+                </div>
+            </div>
+            <div class="setting-row">
+                <label>Sanction</label>
+                <div class="stepper">
+                    <button class="step-btn step-down" data-setting="sanctionRunTime" data-dir="down">−</button>
+                    <span class="step-value" id="val-sanctionRunTime">8</span>
+                    <button class="step-btn step-up" data-setting="sanctionRunTime" data-dir="up">+</button>
+                </div>
+            </div>
+        </section>
 
         <!-- Score Values Section (collapsible, hidden by default) -->
         <section class="settings-section">
@@ -70,51 +107,6 @@
                         <button class="step-btn step-up" data-setting="scoreExtra" data-dir="up">+</button>
                     </div>
                 </div>
-            </div>
-        </section>
-
-        <!-- Music Section -->
-        <section class="settings-section">
-            <h2>Music</h2>
-            <div class="setting-row">
-                <label>Song List</label>
-                <select id="songlist-select">
-                    <option value="">Loading...</option>
-                </select>
-            </div>
-        </section>
-
-        <!-- Timers Section -->
-        <section class="settings-section">
-            <h2>Timers <span class="unit">(minutes)</span></h2>
-            <div class="setting-row">
-                <label>Default</label>
-                <div class="stepper">
-                    <button class="step-btn step-down" data-setting="defaultRunTime" data-dir="down">−</button>
-                    <span class="step-value" id="val-defaultRunTime">5</span>
-                    <button class="step-btn step-up" data-setting="defaultRunTime" data-dir="up">+</button>
-                </div>
-            </div>
-            <div class="setting-row">
-                <label>Sanction</label>
-                <div class="stepper">
-                    <button class="step-btn step-down" data-setting="sanctionRunTime" data-dir="down">−</button>
-                    <span class="step-value" id="val-sanctionRunTime">8</span>
-                    <button class="step-btn step-up" data-setting="sanctionRunTime" data-dir="up">+</button>
-                </div>
-            </div>
-        </section>
-
-        <!-- Current Game Type Indicator -->
-        <section class="settings-section info-section">
-            <h2>Current Status</h2>
-            <div class="info-row">
-                <span class="info-label">Game Type</span>
-                <span class="info-value" id="info-gameType">---</span>
-            </div>
-            <div class="info-row">
-                <span class="info-label">Game State</span>
-                <span class="info-value" id="info-gameState">---</span>
             </div>
         </section>
     </div>

@@ -18,8 +18,6 @@
         songListSelect:  document.getElementById('songlist-select'),
         defaultRunTime:  document.getElementById('val-defaultRunTime'),
         sanctionRunTime: document.getElementById('val-sanctionRunTime'),
-        gameType:        document.getElementById('info-gameType'),
-        gameState:       document.getElementById('info-gameState'),
         connectionStatus: document.getElementById('connection-status'),
     };
 
@@ -134,10 +132,6 @@
             currentValues.sanctionRunTime = state.sanctionGameRunTime;
             els.sanctionRunTime.textContent = currentValues.sanctionRunTime;
         }
-
-        // Info
-        els.gameType.textContent = state.currentGameType || '---';
-        els.gameState.textContent = state.gameRunning || '---';
 
         // Theme
         applyTheme(!!state.outdoorMode);
