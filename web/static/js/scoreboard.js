@@ -321,7 +321,7 @@
         var currentGame = state.currentGame || {};
 
         if (gameRunning === 'Countdown') {
-            els.transitionMessage.textContent = 'Starting in ' + (state.secondsLeft || '') + '...';
+            els.transitionMessage.textContent = 'Count Down in Progress';
         } else if (gameRunning === 'Ready') {
             els.transitionMessage.textContent = 'Get Ready!';
         } else {

@@ -3,11 +3,9 @@
 # Import stuff
 import threading
 import sys 
-from array import*
-from time import sleep, localtime, strftime, gmtime, strptime
+from time import sleep, strftime, gmtime
 from datetime import datetime,timedelta
-from os import listdir
-from os.path import isfile, join
+from os.path import join
 import os
 import random
 import pygame
@@ -22,7 +20,6 @@ import requests
 from SyncWithChallonge import * 
 from flask import Flask, render_template, send_from_directory
 from flask_socketio import SocketIO, emit
-import json
 import logging
 
 DeBug = False
@@ -33,11 +30,6 @@ if len(sys.argv) == 2:
         DeBug = True
 
 # Stuff to pull from config
-ValueHit            = 1
-ValueCatch          = 2
-ValueSpot           = 2
-ValuePenalty        = 1
-ValueExtraPoint     = 1
 SongList            = "SongList/EDM"
 DefaultGameRunTime  = 5
 SanctionGameRunTime = 8
@@ -193,13 +185,36 @@ scaleFactor = (ctypes.windll.shcore.GetScaleFactorForDevice(0) ) /100
 ScreenScale = ScreenScale / scaleFactor
 
 SWidth, SHeight = screen.get_size()
-DefaultBack = pygame.image.load(join(path,"Images/DefaultBack.jpg"))
 
-TimerBack = pygame.image.load(join(path,"Images/TimerBack2.bmp"))
-BlackTimerBack = pygame.image.load(join(path,"Images/BlackTimerBack.jpg"))
+# Reference resolution — all hardcoded coordinates were designed for 1920x1080.
+# ScaleX/ScaleY let us place everything proportionally on ANY screen size.
+REF_W = 1920.0
+REF_H = 1080.0
+ScaleX = SWidth / REF_W
+ScaleY = SHeight / REF_H
+
+DefaultBack = pygame.transform.scale(
+    pygame.image.load(join(path,"Images/DefaultBack.jpg")), (SWidth, SHeight))
+TimerBack = pygame.transform.scale(
+    pygame.image.load(join(path,"Images/TimerBack2.bmp")), (SWidth, SHeight))
+BlackTimerBack = pygame.transform.scale(
+    pygame.image.load(join(path,"Images/BlackTimerBack.jpg")), (SWidth, SHeight))
 Logo = pygame.image.load(join(path,"Images/logo.png"))
 screen.blit(pygame.transform.scale(Logo, (SWidth, SHeight)), (0, 0))
 pygame.display.flip()
+
+# --- Pre-load fonts (scaled to actual screen, loaded ONCE not every frame) ---
+FONT_TIMER    = pygame.freetype.Font("Fonts/Moby-Bold.ttf", int(450 * ScaleY))
+FONT_SCORES   = pygame.freetype.Font("Fonts/monofonto-rg.otf", int(75 * ScaleY))
+FONT_BIG      = pygame.freetype.Font("Fonts/BAUHS93.TTF", int(105 * ScaleY))
+FONT_GAME     = pygame.freetype.Font("Fonts/ERASDEMI.TTF", int(75 * ScaleY))
+FONT_SONG     = pygame.freetype.Font("Fonts/ERASDEMI.TTF", int(30 * ScaleY))
+
+# --- Color constants ---
+CLR_YELLOW = (253, 214, 48)
+CLR_BLACK  = (0, 0, 0)
+CLR_PURPLE = (95, 0, 160)
+CLR_RED    = (255, 0, 0)
 
 if DeBug: print(str(datetime.now()) + " Screen Done" )
 vCountdown = Video(join(path,"Video/Countdown.mp4"))
@@ -597,19 +612,6 @@ def WriteGameToDB():
         conn = sqlite3.connect(database)
         cur = conn.cursor()
 
-        #Game info
-        #query = "update Games set " 
-        #query =  query + "  GreenTotalScore = " + str(CurrentGame.get("GreenTotalScore"))
-        #query =  query + ", YellowTotalScore = " + str(CurrentGame.get("YellowTotalScore"))
-        #query =  query + ", ActualStartTime  = '" + str(CurrentGame.get("ActualStartTime")) + "'"
-        #query =  query + ", ActualEndTime = '" + str(CurrentGame.get("ActualEndTime")) + "'"
-        #query =  query + ", SongPlayed =  '" + str(CurrentGame.get("SongPlayed")) + "'"
-        #query =  query + ", ArtistPlayed =  '" + str(CurrentGame.get("ArtistPlayed")) + "'"
-        #query =  query + ", GameWinner =  '" + str(CurrentGame.get("GameWinner")) + "'"
-        #query =  query + ", GameStatus =  '" + str(CurrentGame.get("GameStatus")) + "'"
-        #query =  query + ", GameEarlyStopReason = '" + str(CurrentGame.get("GameEarlyStopReason")) + "'"
-        #query =  query + " where GameNumber = " + str(CurrentGame.get("GameNumber")) + ";"
-
         query = "update Games set " 
         query =  query + "  GreenTotalScore = ?" 
         query =  query + ", YellowTotalScore = ?" 
@@ -651,15 +653,6 @@ def WriteGameToDB():
         conn.commit()
 
         #Yellow Scores
-        #query = "update Scores set " 
-        #query =  query + "  Total = " + str(YellowScores.get("Total"))
-        #query =  query + ", Hit = " + str(YellowScores.get("Hit"))
-        #query =  query + ", Catch = " + str(YellowScores.get("Catch"))
-        #query =  query + ", Spot = " + str(YellowScores.get("Spot"))
-        #query =  query + ", Penalty = " + str(YellowScores.get("Penalty"))
-        #query =  query + ", ExtraPoint = " + str(YellowScores.get("ExtraPoint"))
-        #query =  query + " Where Side = 'Yellow' and GameNumber = " + str(CurrentGame.get("GameNumber")) + ";"
-
         query = "update Scores set " 
         query =  query + "  Total = ?"
         query =  query + ", Hit = ?" 
@@ -693,15 +686,6 @@ def WriteGameToDB():
         conn.commit()
 
         #Green Scores
-        #query = "update Scores set " 
-        #query =  query + "  Total = " + str(GreenScores.get("Total"))
-        #query =  query + ", Hit = " + str(GreenScores.get("Hit"))
-        #query =  query + ", Catch = " + str(GreenScores.get("Catch"))
-        #query =  query + ", Spot = " + str(GreenScores.get("Spot"))
-        #query =  query + ", Penalty = " + str(GreenScores.get("Penalty"))
-        #query =  query + ", ExtraPoint = " + str(GreenScores.get("ExtraPoint"))
-        #query =  query + " Where Side = 'Green' and GameNumber = " + str(CurrentGame.get("GameNumber")) + ";"
-        
         pTotal = GreenScores.get("Total")
         pHit = GreenScores.get("Hit")
         pCatch = GreenScores.get("Catch")
@@ -733,11 +717,6 @@ def WriteGameToDB():
             except Exception:
                 pass
     return 1
-
-#Define a get files function
-def GetFiles(Path):
-    onlyfiles = [f for f in listdir(Path) if isfile(join(Path, f))]
-    return onlyfiles
 
 def ChangeScore(Team,ScoreType,Up_Down):
     global ScoreValues
@@ -890,7 +869,7 @@ def NormalGameEnd():
         ret = WriteGameToDB()
         if ret == 0: 
             sleep(1)
-            attempts =+ 1
+            attempts += 1
         else:
             break
     if APIIitegration: 
@@ -1129,7 +1108,7 @@ def ButtonPressed(channel):
                 SpeakIt.put("Auto instructions off")
             else:
                 AutoInst = True
-                SpeakIt.put("Auto nstructions on")
+                SpeakIt.put("Auto Instructions on")
 
         elif channel ==  pygame.K_3: # Toggle API integration
 
@@ -1164,83 +1143,74 @@ def ButtonPressed(channel):
         pygame.mixer.Sound.play(Close)  
 
 def DrawScoreBoard():
+    # All coordinates below are in 1920x1080 "reference" space.
+    # ScaleX/ScaleY convert them to the actual screen resolution.
 
-    def DrawTeamScore(TeamColor,HStart,VStart,FontColor): 
-        TeamName = TeamColor + "TeamName"
+    def DrawTeamScore(TeamColor, HStart, VStart, FontColor):
         if TeamColor == "Yellow":
             Team = YellowScores
-            TeamLable = " Yellow:" 
+            TeamLable = " Yellow:"
             Text = CurrentGame.get("YellowTeamName")
         else:
             Team = GreenScores
             TeamLable =  "  Green:"
             Text = CurrentGame.get("GreenTeamName")
 
-        indent = int(435 * ScreenScale)
-        ls = int(68 * ScreenScale)
-        x = int(HStart * ScreenScale)
-        y = int(VStart * ScreenScale)
-        
-        Scores.render_to(screen,(x,y), TeamLable + Text, (FontColor))
+        indent = int(435 * ScaleX)
+        ls = int(68 * ScaleY)
+        x = int(HStart * ScaleX)
+        y = int(VStart * ScaleY)
+
+        FONT_SCORES.render_to(screen, (x, y), TeamLable + Text, FontColor)
         if CurrentGameType == "Normal":
             y = y + ls
-            BigScore.render_to(screen,(x + indent * .5 , y+ (ls * 1.3) - ls), "Total", (FontColor))
+            FONT_BIG.render_to(screen, (x + indent * .5, y + (ls * 1.3) - ls), "Total", FontColor)
             y = y + ls
             Text = str(Team.get("Total"))
-            BigScore.render_to(screen,(x + indent * .5, y + (ls * 1.6) - ls ), "  " + Text, (FontColor))
+            FONT_BIG.render_to(screen, (x + indent * .5, y + (ls * 1.6) - ls), "  " + Text, FontColor)
         else:
             y = y + ls
             Text = str(Team.get("Hit"))
-            Scores.render_to(screen,(x,y), "    Hit:" + Text, (FontColor))
-            BigScore.render_to(screen,(x + indent , y+ (ls * 1.3) - ls), "Total", (FontColor))
+            FONT_SCORES.render_to(screen, (x, y), "    Hit:" + Text, FontColor)
+            FONT_BIG.render_to(screen, (x + indent, y + (ls * 1.3) - ls), "Total", FontColor)
             y = y + ls
             if CurrentGameType in ("Elimination"):
                 Text = str(Team.get("Spot"))
-                Scores.render_to(screen,(x,y), "   Spot:" + Text, (FontColor))
+                FONT_SCORES.render_to(screen, (x, y), "   Spot:" + Text, FontColor)
                 y = y + ls
                 Text = str(Team.get("Catch"))
-                Scores.render_to(screen,(x,y), "  Catch:" + Text, (FontColor))
+                FONT_SCORES.render_to(screen, (x, y), "  Catch:" + Text, FontColor)
             else:
                 Text = str(Team.get("Catch"))
-                Scores.render_to(screen,(x,y), "  Catch:" + Text, (FontColor))
+                FONT_SCORES.render_to(screen, (x, y), "  Catch:" + Text, FontColor)
             Text = str(Team.get("Total"))
-            BigScore.render_to(screen,(x + indent , y + (ls * 1.6) - ls ), "  " + Text, (FontColor))
+            FONT_BIG.render_to(screen, (x + indent, y + (ls * 1.6) - ls), "  " + Text, FontColor)
             y = y + ls
             Text = str(Team.get("Penalty"))
-            Scores.render_to(screen,(x,y), "Penalty:" + Text, (FontColor))
+            FONT_SCORES.render_to(screen, (x, y), "Penalty:" + Text, FontColor)
 
-    Yellow = (253,214,48)
-    Black = (0,0,0)
-    Purple = (95,0,160)
-    Red = (255,0,0)
-    Timer = pygame.freetype.Font("Fonts/Moby-Bold.ttf", int(450 * ScreenScale))
-    Scores = pygame.freetype.Font("Fonts/monofonto-rg.otf", int(75 * ScreenScale))
-    BigScore = pygame.freetype.Font("Fonts/BAUHS93.TTF", int(105 * ScreenScale))
-    GameInfo = pygame.freetype.Font("Fonts/ERASDEMI.TTF", int(75 * ScreenScale))
-    SongInfo = pygame.freetype.Font("Fonts/ERASDEMI.TTF", int(30 * ScreenScale))
-    
     if GameRunning in("No","Finished") and (datetime.now()-DelayScreen).total_seconds() > 10:
-        screen.blit(pygame.transform.scale(DefaultBack, (SWidth, SHeight)), (0, 0))
+        screen.blit(DefaultBack, (0, 0))
         #Winner Box
-        x = int(100 * ScreenScale)
-        y = int(90 * ScreenScale)
-        ls = int(68 * ScreenScale)
-        FontColor = Yellow
-        indent = int(45 * ScreenScale)
+        x = int(100 * ScaleX)
+        y = int(90 * ScaleY)
+        ls = int(68 * ScaleY)
+        FontColor = CLR_YELLOW
+        indent = int(45 * ScaleX)
         if CurrentGame.get("GameStatus") == "Finished":
-            GameInfo.render_to(screen,(x,y), "Winner:", (FontColor))
+            FONT_GAME.render_to(screen, (x, y), "Winner:", FontColor)
             y = y + ls
             if CurrentGame.get("GameWinner") == "Yellow":
                 Text = CurrentGame.get("YellowTeamName")
             else:
                 Text = CurrentGame.get("GreenTeamName")
-            GameInfo.render_to(screen,(x + indent,y), Text, (FontColor))
+            FONT_GAME.render_to(screen, (x + indent, y), Text, FontColor)
             y = y + ls
             if CurrentGame.get("GameWinner") == "Yellow":
                 Text = str(YellowScores.get("Total")) + " to " + str(GreenScores.get("Total"))
             else:
                 Text = str(GreenScores.get("Total")) + " to " +  str(YellowScores.get("Total"))
-            GameInfo.render_to(screen,(x + indent,y), "Total " + Text, (FontColor))
+            FONT_GAME.render_to(screen, (x + indent, y), "Total " + Text, FontColor)
             y = y + ls
             if CurrentGameType in ("Elimination","Sanction","Tournament"):
                 Text = ""
@@ -1266,7 +1236,7 @@ def DrawScoreBoard():
                        Text = Text + str(GreenScores.get("Hit")) + " Hits - "
                        Text = Text + str(GreenScores.get("Catch")) + " Catches - "
                        Text = Text + str(GreenScores.get("Penalty")) + " Penalties"
-                SongInfo.render_to(screen,(x + indent,y), Text, (FontColor))
+                FONT_SONG.render_to(screen, (x + indent, y), Text, FontColor)
 
         else:
             y = y * 3
@@ -1275,201 +1245,110 @@ def DrawScoreBoard():
         if NextGame.get("GameNumber") >= 0 \
             and NextGame.get("GreenTeamName") != "Green" \
             and NextGame.get("YellowTeamName") != "Yellow":
-            
+
             y = y + ls * 2
-            GameInfo.render_to(screen,(x,y), "Next Game:", (FontColor))
+            FONT_GAME.render_to(screen, (x, y), "Next Game:", FontColor)
             y = y + ls * 1.2
-            GameInfo.render_to(screen,(x,y), "Green:", (FontColor))
+            FONT_GAME.render_to(screen, (x, y), "Green:", FontColor)
             y = y + ls
             Text = NextGame.get("GreenTeamName")
-            GameInfo.render_to(screen,(x + indent,y), Text, (FontColor))
+            FONT_GAME.render_to(screen, (x + indent, y), Text, FontColor)
             y = y + ls * 1.2
-            GameInfo.render_to(screen,(x,y), "Yellow:", (FontColor))
+            FONT_GAME.render_to(screen, (x, y), "Yellow:", FontColor)
             y = y + ls
             Text = NextGame.get("YellowTeamName")
-            GameInfo.render_to(screen,(x + indent,y), Text, (FontColor))
+            FONT_GAME.render_to(screen, (x + indent, y), Text, FontColor)
 
-        x = int(800 * ScreenScale)
-        y = int(1030 * ScreenScale)
-        Text = CurrentGameType 
-        SongInfo.render_to(screen,(x,y), Text, (Purple))
+        x = int(800 * ScaleX)
+        y = int(1030 * ScaleY)
+        Text = CurrentGameType
+        FONT_SONG.render_to(screen, (x, y), Text, CLR_PURPLE)
         if AutoInst:
-            x = int(1100 * ScreenScale)
-            SongInfo.render_to(screen,(x,y), "Auto Instructions", (Purple))
+            x = int(1100 * ScaleX)
+            FONT_SONG.render_to(screen, (x, y), "Auto Instructions", CLR_PURPLE)
         if APIIitegration:
-            x = int(1500 * ScreenScale)
-            SongInfo.render_to(screen,(x,y), "Tournament Integration", (Purple))
+            x = int(1500 * ScaleX)
+            FONT_SONG.render_to(screen, (x, y), "Tournament Integration", CLR_PURPLE)
     else:
-        screen.blit(pygame.transform.scale(TimerBack, (SWidth, SHeight)), (0, 0))
-        FontColor = Black
+        screen.blit(TimerBack, (0, 0))
+        FontColor = CLR_BLACK
         if SecondsLeft < 0:
-            FontColor = Red
+            FontColor = CLR_RED
             Ctr = strftime("%#M:%S", gmtime(SecondsLeft * -1))
         elif SecondsLeft <= 59:
             Ctr = "  " + strftime("%S", gmtime(SecondsLeft))
         else:
             Ctr = strftime("%#M:%S", gmtime(SecondsLeft))
-        x = int(262 * ScreenScale)
-        y = int(450 * ScreenScale)
-        
+        x = int(262 * ScaleX)
+        y = int(450 * ScaleY)
+
         if SecondsLeft in (1,3,5,7,9):
-            screen.blit(pygame.transform.scale(BlackTimerBack, (SWidth, SHeight)), (0, 0))
-            FontColor = Yellow
-        if GameRunning == "Pause":    
-            Timer.render_to(screen, (x,y), Ctr, (Red))
+            screen.blit(BlackTimerBack, (0, 0))
+            FontColor = CLR_YELLOW
+        if GameRunning == "Pause":
+            FONT_TIMER.render_to(screen, (x, y), Ctr, CLR_RED)
         else:
-            Timer.render_to(screen, (x,y), Ctr, (FontColor))
-        
-        DrawTeamScore("Yellow",60,40,FontColor)
-        DrawTeamScore("Green",960,40,FontColor)
+            FONT_TIMER.render_to(screen, (x, y), Ctr, FontColor)
+
+        DrawTeamScore("Yellow", 60, 40, FontColor)
+        DrawTeamScore("Green", 960, 40, FontColor)
 
     #Song Info
     if pygame.mixer.music.get_busy():
-        x = int(60 * ScreenScale)
-        y = int(990 * ScreenScale)
-        ls = int(30 * ScreenScale)
+        x = int(60 * ScaleX)
+        y = int(990 * ScaleY)
+        ls = int(30 * ScaleY)
         Text = SongData.title
-        SongInfo.render_to(screen,(x,y), "Song: " + Text, (FontColor))
+        FONT_SONG.render_to(screen, (x, y), "Song: " + Text, FontColor)
         y = y + ls
         Text = SongData.artist
-        SongInfo.render_to(screen,(x,y), "By: " + Text, (FontColor))
+        FONT_SONG.render_to(screen, (x, y), "By: " + Text, FontColor)
 
     pygame.display.flip()
+
+VIDEO_MAP = {
+    "vCountdown":   vCountdown,
+    "Elimination":  vEliminationInst,
+    "Normal":       vNormalInst,
+    "vPromo":       vPromo,
+    "Sanction":     vSanctionInst,
+    "vShootInst":   vShootInst,
+}
+ALL_VIDEOS = list(VIDEO_MAP.values())
+
+def ShrinkAllVideos():
+    for v in ALL_VIDEOS:
+        v.resize((1, 1))
 
 def PlayAVideo(Video):
     global CurrentVid
     global HoldIt
-
+    vid = VIDEO_MAP.get(Video)
+    if vid is None:
+        return
     if pygame.mixer.music.get_busy():
         pygame.mixer.music.fadeout(5000)
-    if Video == "vCountdown":
-        if not vCountdown.active:
-            vCountdown.resize((SWidth, SHeight))
-            vCountdown.restart()
-            vCountdown.play()
-            CurrentVid = "Playing vCountdown"
-        while vCountdown.active:
-            vCountdown.draw(screen,(0,0))
-            pygame.display.update()
-            for event in pygame.event.get(): 
-                if event.type == pygame.KEYDOWN: 
-                    HoldIt = datetime.now()
-                    if event.key ==  pygame.K_m: # Pause  Video
-                        vCountdown.toggle_pause() 
-                elif event.type == pygame.KEYUP: 
-                    if  (datetime.now()-HoldIt).total_seconds() > 2:
-                        if event.key == pygame.K_v:
-                            vCountdown.stop()
-                            pygame.mixer.Sound.play(Close)
-        
-    if Video == "Elimination":
-        if not vEliminationInst.active:
-            vEliminationInst.resize((SWidth, SHeight))
-            vEliminationInst.restart()
-            vEliminationInst.play()
-            CurrentVid = "Playing Elimination"
-        while vEliminationInst.active:
-            vEliminationInst.draw(screen,(0,0))
-            pygame.display.update()
-            for event in pygame.event.get(): 
-                if event.type == pygame.KEYDOWN: 
-                    HoldIt = datetime.now()
-                    if event.key ==  pygame.K_m: # Pause  Video
-                        vEliminationInst.toggle_pause() 
-                elif event.type == pygame.KEYUP: 
-                    if  (datetime.now()-HoldIt).total_seconds() > 2:
-                        if event.key == pygame.K_v:
-                            vEliminationInst.stop()
-                            pygame.mixer.Sound.play(Close)
-        
-    if Video == "Normal":
-        if not vNormalInst.active:
-            vNormalInst.resize((SWidth, SHeight))
-            vNormalInst.restart()
-            vNormalInst.play()
-            CurrentVid = "Playing Normal"
-        while vNormalInst.active:
-            vNormalInst.draw(screen,(0,0))
-            pygame.display.update()
-            for event in pygame.event.get(): 
-                if event.type == pygame.KEYDOWN: 
-                    HoldIt = datetime.now()
-                    if event.key ==  pygame.K_m: # Pause  Video
-                        vNormalInst.toggle_pause() 
-                elif event.type == pygame.KEYUP: 
-                    if  (datetime.now()-HoldIt).total_seconds() > 2:
-                        if event.key == pygame.K_v:
-                            vNormalInst.stop()
-                            pygame.mixer.Sound.play(Close)        
-            
-    if Video == "vPromo":
-        if not vCountdown.active:
-            vPromo.resize((SWidth, SHeight))
-            vPromo.restart()
-            vPromo.play()
-            CurrentVid = "Playing vPromo"
-        while vPromo.active:
-            vPromo.draw(screen,(0,0))
-            pygame.display.update()
-            for event in pygame.event.get(): 
-                if event.type == pygame.KEYDOWN: 
-                    HoldIt = datetime.now()
-                    if event.key ==  pygame.K_m: # Pause  Video
-                        vPromo.toggle_pause() 
-                elif event.type == pygame.KEYUP: 
-                    if  (datetime.now()-HoldIt).total_seconds() > 2:
-                        if event.key == pygame.K_v:
-                            vPromo.stop()
-                            pygame.mixer.Sound.play(Close)   
-
-    if Video == "Sanction":
-        if not vSanctionInst.active:
-            vSanctionInst.resize((SWidth, SHeight))
-            vSanctionInst.restart()
-            vSanctionInst.play()
-            CurrentVid = "Playing Sanction"
-        while vSanctionInst.active:
-            vSanctionInst.draw(screen,(0,0))
-            pygame.display.update()
-            for event in pygame.event.get(): 
-                if event.type == pygame.KEYDOWN: 
-                    HoldIt = datetime.now()
-                    if event.key ==  pygame.K_m: # Pause  Video
-                        vSanctionInst.toggle_pause() 
-                elif event.type == pygame.KEYUP: 
-                    if  (datetime.now()-HoldIt).total_seconds() > 2:
-                        if event.key == pygame.K_v:
-                            vSanctionInst.stop()
-                            pygame.mixer.Sound.play(Close)   
-        
-    if Video == "vShootInst":
-        if not vShootInst.active:
-            vShootInst.resize((SWidth, SHeight))
-            vShootInst.restart()
-            vShootInst.play()
-            CurrentVid = "Playing vShootInst"
-        while vShootInst.active:
-            vShootInst.draw(screen,(0,0))
-            pygame.display.update()
-            for event in pygame.event.get(): 
-                if event.type == pygame.KEYDOWN: 
-                    HoldIt = datetime.now()
-                    if event.key ==  pygame.K_m: # Pause  Video
-                        vShootInst.toggle_pause() 
-                elif event.type == pygame.KEYUP: 
-                    if  (datetime.now()-HoldIt).total_seconds() > 2:
-                        if event.key == pygame.K_v:
-                            vShootInst.stop()
-                            pygame.mixer.Sound.play(Close) 
-
-    vCountdown.resize((1,1))
-    vEliminationInst.resize((1, 1))
-    vNormalInst.resize((1,1))
-    vPromo.resize((1, 1))
-    vSanctionInst.resize((1, 1))
-    vShootInst.resize((1, 1))
+    if not vid.active:
+        vid.resize((SWidth, SHeight))
+        vid.restart()
+        vid.play()
+        CurrentVid = "Playing " + Video
+    while vid.active:
+        vid.draw(screen, (0, 0))
+        pygame.display.update()
+        for event in pygame.event.get():
+            if event.type == pygame.KEYDOWN:
+                HoldIt = datetime.now()
+                if event.key == pygame.K_m:
+                    vid.toggle_pause()
+            elif event.type == pygame.KEYUP:
+                if (datetime.now() - HoldIt).total_seconds() > 2:
+                    if event.key == pygame.K_v:
+                        vid.stop()
+                        pygame.mixer.Sound.play(Close)
+    ShrinkAllVideos()
     CurrentVid = "None"
-    DrawScoreBoard() 
+    DrawScoreBoard()
 
 if DeBug: PrintDeBug()
 
@@ -1479,12 +1358,7 @@ tts_thread = TTSThread(SpeakIt)
 SpeakIt.put("Welcome to Archery Tag by Sherwood Adventure.")
 
 CurrentVid = "None"
-vCountdown.resize((1,1))
-vEliminationInst.resize((1, 1))
-vNormalInst.resize((1,1))
-vPromo.resize((1, 1))
-vSanctionInst.resize((1, 1))
-vShootInst.resize((1, 1))
+ShrinkAllVideos()
 
 GetNextGame()
 
@@ -1585,14 +1459,12 @@ while 1:
             pygame.mixer.music.stop()
     
 
-    pygame.display.update()
-
     # Broadcast state to web clients (~2Hz)
     broadcast_tick += 1
     if broadcast_tick >= 5:
         web_thread.broadcast_state()
         broadcast_tick = 0
 
-    #Leave some CPU for others....
-    sleep(0.1) 
+    #Leave some CPU for others — clock.tick(10) caps at 10 FPS
+    clock.tick(10)
         
