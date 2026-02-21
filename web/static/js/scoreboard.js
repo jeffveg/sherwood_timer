@@ -109,11 +109,9 @@
         return (negative ? '-' : '') + m + ':' + (s < 10 ? '0' : '') + s;
     }
 
-    // ---- Helper: calculate total score ----
+    // ---- Helper: get total score from server-calculated value ----
     function calcTotal(scores) {
-        return (scores.Hit || 0) + (scores.Catch || 0) +
-               (scores.Spot || 0) - (scores.Penalty || 0) +
-               (scores.ExtraPoint || 0);
+        return scores.Total || 0;
     }
 
     // ---- Show one view, hide others ----

@@ -68,6 +68,14 @@ function cacheElements() {
     el.confirmMessage = document.getElementById('confirm-message');
     el.confirmYes = document.getElementById('confirm-yes');
     el.confirmNo = document.getElementById('confirm-no');
+
+    // Tournament selection modal
+    el.tournamentOverlay = document.getElementById('tournament-overlay');
+    el.tournamentSelect = document.getElementById('tournament-select');
+    el.tournamentGameType = document.getElementById('tournament-game-type');
+    el.tournamentNone = document.getElementById('tournament-none');
+    el.tournamentOk = document.getElementById('tournament-ok');
+    el.tournamentCancel = document.getElementById('tournament-cancel');
 }
 
 // ==========================================
@@ -101,6 +109,38 @@ socket.on('score_ack', function(data) {
     if (data.success) {
         flashButton(data.action);
     }
+});
+
+socket.on('tournament_list', function(data) {
+    var tournaments = data.tournaments || [];
+    var select = el.tournamentSelect;
+    var noneMsg = el.tournamentNone;
+
+    select.innerHTML = '';
+
+    if (tournaments.length === 0) {
+        select.classList.add('hidden');
+        noneMsg.classList.remove('hidden');
+        el.tournamentOk.classList.add('hidden');
+    } else {
+        select.classList.remove('hidden');
+        noneMsg.classList.add('hidden');
+        el.tournamentOk.classList.remove('hidden');
+
+        var defaultOpt = document.createElement('option');
+        defaultOpt.value = '';
+        defaultOpt.textContent = '-- Choose Tournament --';
+        select.appendChild(defaultOpt);
+
+        tournaments.forEach(function(t) {
+            var opt = document.createElement('option');
+            opt.value = t.tournament_number;
+            opt.textContent = t.name + ' (' + t.completed_matches + '/' + t.total_matches + ')';
+            select.appendChild(opt);
+        });
+    }
+
+    el.tournamentOverlay.classList.remove('hidden');
 });
 
 // ==========================================
@@ -226,7 +266,9 @@ function renderManagementView() {
     el.nextYellowName.textContent = ng.YellowTeamName || '---';
     el.gameTypeVal.textContent = state.currentGameType || 'Normal';
     el.autoInstVal.textContent = state.autoInst ? 'ON' : 'OFF';
-    el.apiIntVal.textContent = state.apiIntegration ? 'ON' : 'OFF';
+    el.apiIntVal.textContent = state.apiIntegration
+        ? (state.selectedTournament || 'ON')
+        : 'OFF';
     el.musicVal.textContent = state.backgroundMusic ? 'ON' : 'OFF';
     el.volVal.textContent = state.backgroundVol || 0;
 }
@@ -315,6 +357,25 @@ function confirmAction() {
 }
 
 // ==========================================
+// Tournament Selection Modal
+// ==========================================
+function selectTournament() {
+    var selected = el.tournamentSelect.value;
+    if (selected) {
+        var gameTypeOverride = el.tournamentGameType.value;
+        socket.emit('select_tournament', {
+            tournament_number: selected,
+            game_type_override: gameTypeOverride
+        });
+        hideTournament();
+    }
+}
+
+function hideTournament() {
+    el.tournamentOverlay.classList.add('hidden');
+}
+
+// ==========================================
 // Button Click Handling
 // ==========================================
 function handleButtonClick(e) {
@@ -400,6 +461,33 @@ document.addEventListener('DOMContentLoaded', function() {
     el.confirmOverlay.addEventListener('click', function(e) {
         if (e.target === el.confirmOverlay) {
             hideConfirm();
+        }
+    });
+
+    // Tournament modal: OK button
+    el.tournamentOk.addEventListener('touchend', function(e) {
+        e.preventDefault();
+        selectTournament();
+    });
+    el.tournamentOk.addEventListener('click', function(e) {
+        if (e.sourceCapabilities && e.sourceCapabilities.firesTouchEvents) return;
+        selectTournament();
+    });
+
+    // Tournament modal: Cancel button
+    el.tournamentCancel.addEventListener('touchend', function(e) {
+        e.preventDefault();
+        hideTournament();
+    });
+    el.tournamentCancel.addEventListener('click', function(e) {
+        if (e.sourceCapabilities && e.sourceCapabilities.firesTouchEvents) return;
+        hideTournament();
+    });
+
+    // Tournament modal: backdrop click to close
+    el.tournamentOverlay.addEventListener('click', function(e) {
+        if (e.target === el.tournamentOverlay) {
+            hideTournament();
         }
     });
 

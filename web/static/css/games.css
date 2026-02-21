@@ -1,0 +1,461 @@
+/* ==========================================
+   Sherwood Adventure Timer - Game Schedule
+   ========================================== */
+
+/* Reset & Base */
+*, *::before, *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+html {
+    font-size: 16px;
+    height: 100%;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #0f0f23;
+    color: #ffffff;
+    min-height: 100%;
+    -webkit-tap-highlight-color: transparent;
+}
+
+#games-page {
+    max-width: 600px;
+    margin: 0 auto;
+    padding: 20px 16px 40px;
+}
+
+/* Header */
+header {
+    text-align: center;
+    margin-bottom: 16px;
+    position: relative;
+}
+
+header h1 {
+    font-size: 1.6rem;
+    font-weight: 700;
+    margin-bottom: 4px;
+}
+
+.subtitle {
+    font-size: 0.85rem;
+    color: rgba(255, 255, 255, 0.4);
+    font-style: italic;
+}
+
+#connection-status {
+    position: absolute;
+    top: 0;
+    right: 0;
+    font-size: 0.75rem;
+    color: rgba(255, 255, 255, 0.3);
+    padding: 2px 8px;
+    border-radius: 8px;
+}
+
+#connection-status.disconnected {
+    background: rgba(239, 68, 68, 0.2);
+    color: #ef4444;
+    font-weight: 600;
+}
+
+/* Navigation Link */
+.nav-link {
+    display: inline-block;
+    color: rgba(255, 255, 255, 0.5);
+    text-decoration: none;
+    font-size: 0.85rem;
+    font-weight: 500;
+    padding: 4px 0;
+    margin-bottom: 8px;
+    transition: color 0.2s;
+}
+
+.nav-link:hover {
+    color: rgba(255, 255, 255, 0.8);
+}
+
+/* ==========================================
+   Filter Bar
+   ========================================== */
+#filter-bar {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 16px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.filter-btn {
+    flex-shrink: 0;
+    padding: 8px 16px;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 20px;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.6);
+    font-family: inherit;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s, color 0.2s, border-color 0.2s;
+}
+
+.filter-btn:active {
+    transform: scale(0.95);
+}
+
+.filter-btn.active {
+    background: rgba(59, 130, 246, 0.2);
+    color: #60a5fa;
+    border-color: #3b82f6;
+}
+
+/* ==========================================
+   Games List
+   ========================================== */
+#games-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.loading-msg {
+    text-align: center;
+    color: rgba(255, 255, 255, 0.4);
+    padding: 40px 0;
+    font-size: 1rem;
+}
+
+.group-divider {
+    font-size: 0.8rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: rgba(255, 255, 255, 0.4);
+    padding: 8px 4px 2px;
+    margin-top: 4px;
+}
+
+.no-games-msg {
+    text-align: center;
+    color: rgba(255, 255, 255, 0.4);
+    padding: 40px 0;
+    font-size: 1rem;
+}
+
+/* ==========================================
+   Game Card
+   ========================================== */
+.game-card {
+    background: rgba(255, 255, 255, 0.05);
+    border: 2px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    padding: 12px 14px;
+    cursor: pointer;
+    transition: transform 0.1s ease, border-color 0.2s ease, background 0.2s ease;
+}
+
+.game-card:active {
+    transform: scale(0.98);
+}
+
+.game-card.is-next {
+    border-color: #3b82f6;
+    background: rgba(59, 130, 246, 0.1);
+}
+
+.game-card.status-finished {
+    opacity: 0.55;
+    cursor: default;
+}
+
+.game-card.status-skipped {
+    opacity: 0.35;
+    cursor: default;
+}
+
+.game-card.status-playing {
+    border-color: #22c55e;
+    background: rgba(34, 197, 94, 0.1);
+}
+
+/* Card Header Row */
+.game-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.game-card-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.game-group-badge {
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    background: rgba(255, 255, 255, 0.1);
+    padding: 2px 8px;
+    border-radius: 6px;
+    color: rgba(255, 255, 255, 0.6);
+}
+
+.game-round-badge {
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.4);
+}
+
+.game-status-badge {
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 2px 8px;
+    border-radius: 6px;
+}
+
+.badge-not-started {
+    background: rgba(59, 130, 246, 0.15);
+    color: #60a5fa;
+}
+
+.badge-finished {
+    background: rgba(34, 197, 94, 0.15);
+    color: #4ade80;
+}
+
+.badge-skipped {
+    background: rgba(239, 68, 68, 0.15);
+    color: #f87171;
+}
+
+.badge-playing {
+    background: rgba(34, 197, 94, 0.25);
+    color: #4ade80;
+    animation: pulse-badge 1.5s ease-in-out infinite;
+}
+
+.badge-next {
+    background: rgba(59, 130, 246, 0.25);
+    color: #93c5fd;
+}
+
+@keyframes pulse-badge {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+/* Teams Row */
+.game-card-teams {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.game-team {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 6px 4px;
+    border-radius: 8px;
+}
+
+.game-team-green {
+    background: rgba(21, 128, 61, 0.2);
+}
+
+.game-team-yellow {
+    background: rgba(202, 138, 4, 0.2);
+}
+
+.game-team-name {
+    font-size: 0.95rem;
+    font-weight: 700;
+    text-align: center;
+    word-break: break-word;
+    line-height: 1.2;
+}
+
+.game-team-green .game-team-name {
+    color: #4ade80;
+}
+
+.game-team-yellow .game-team-name {
+    color: #fbbf24;
+}
+
+.game-team-score {
+    font-size: 1.4rem;
+    font-weight: 900;
+    font-variant-numeric: tabular-nums;
+    margin-top: 2px;
+}
+
+.game-team-green .game-team-score {
+    color: #4ade80;
+}
+
+.game-team-yellow .game-team-score {
+    color: #fbbf24;
+}
+
+.game-vs {
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: rgba(255, 255, 255, 0.3);
+    flex-shrink: 0;
+}
+
+/* Winner indicator */
+.game-winner {
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-align: center;
+    margin-top: 6px;
+    color: #4ade80;
+}
+
+/* Game Type badge */
+.game-type-badge {
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.35);
+    text-align: center;
+    margin-top: 4px;
+}
+
+/* ==========================================
+   Light / Outdoor Theme Overrides
+   ========================================== */
+body[data-theme="light"] {
+    background: #f0f0f0;
+    color: #1a1a1a;
+}
+
+body[data-theme="light"] header h1 {
+    color: #1a1a1a;
+}
+
+body[data-theme="light"] .subtitle {
+    color: #999999;
+}
+
+body[data-theme="light"] #connection-status {
+    color: #999999;
+}
+
+body[data-theme="light"] #connection-status.disconnected {
+    background: rgba(239, 68, 68, 0.15);
+    color: #dc2626;
+}
+
+body[data-theme="light"] .nav-link {
+    color: #888888;
+}
+
+body[data-theme="light"] .nav-link:hover {
+    color: #333333;
+}
+
+body[data-theme="light"] .filter-btn {
+    border-color: #cccccc;
+    color: #666666;
+}
+
+body[data-theme="light"] .filter-btn.active {
+    background: rgba(59, 130, 246, 0.1);
+    color: #2563eb;
+    border-color: #3b82f6;
+}
+
+body[data-theme="light"] .game-card {
+    background: #ffffff;
+    border-color: #e0e0e0;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+body[data-theme="light"] .game-card.is-next {
+    border-color: #3b82f6;
+    background: rgba(59, 130, 246, 0.05);
+}
+
+body[data-theme="light"] .game-card.status-playing {
+    border-color: #16a34a;
+    background: rgba(34, 197, 94, 0.05);
+}
+
+body[data-theme="light"] .game-group-badge {
+    background: #e8e8e8;
+    color: #555555;
+}
+
+body[data-theme="light"] .game-round-badge {
+    color: #888888;
+}
+
+body[data-theme="light"] .game-vs {
+    color: #aaaaaa;
+}
+
+body[data-theme="light"] .game-team-green {
+    background: rgba(21, 128, 61, 0.1);
+}
+
+body[data-theme="light"] .game-team-yellow {
+    background: rgba(202, 138, 4, 0.1);
+}
+
+body[data-theme="light"] .game-team-green .game-team-name {
+    color: #15803d;
+}
+
+body[data-theme="light"] .game-team-yellow .game-team-name {
+    color: #a16207;
+}
+
+body[data-theme="light"] .game-team-green .game-team-score {
+    color: #15803d;
+}
+
+body[data-theme="light"] .game-team-yellow .game-team-score {
+    color: #a16207;
+}
+
+body[data-theme="light"] .game-winner {
+    color: #15803d;
+}
+
+body[data-theme="light"] .game-type-badge {
+    color: #999999;
+}
+
+body[data-theme="light"] .loading-msg,
+body[data-theme="light"] .no-games-msg {
+    color: #999999;
+}
+
+body[data-theme="light"] .group-divider {
+    color: #888888;
+}
+
+/* ==========================================
+   Responsive
+   ========================================== */
+@media (max-width: 400px) {
+    .game-team-name {
+        font-size: 0.85rem;
+    }
+    .game-team-score {
+        font-size: 1.2rem;
+    }
+}
