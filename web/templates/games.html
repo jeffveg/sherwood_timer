@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>Games - Sherwood Adventure Timer</title>
+    <link rel="stylesheet" href="/static/css/games.css">
+</head>
+<body>
+
+    <div id="games-page">
+        <a href="/" class="nav-link">&larr; Back to Controls</a>
+        <header>
+            <h1>Game Schedule</h1>
+            <p class="subtitle">Tap a game to set it as next</p>
+            <div id="connection-status">Connected</div>
+        </header>
+
+        <!-- Filter controls -->
+        <div id="filter-bar">
+            <button class="filter-btn active" data-filter="all">All</button>
+            <button class="filter-btn" data-filter="Not Started">Upcoming</button>
+            <button class="filter-btn" data-filter="Finished">Finished</button>
+            <button class="filter-btn" data-filter="Skipped">Skipped</button>
+        </div>
+
+        <!-- Games list -->
+        <div id="games-list">
+            <div class="loading-msg">Loading games...</div>
+        </div>
+    </div>
+
+    <script src="/static/js/socket.io.min.js"></script>
+    <script src="/static/js/games.js"></script>
+</body>
+</html>

@@ -17,7 +17,8 @@ from tinytag import TinyTag
 import sqlite3
 import ctypes
 import requests
-from SyncWithChallonge import * 
+from SyncWithSherwood import *
+import SyncWithSherwood
 from flask import Flask, render_template, send_from_directory
 from flask_socketio import SocketIO, emit
 import logging
@@ -355,6 +356,10 @@ class WebGameThread(threading.Thread):
         def admin():
             return render_template('admin.html')
 
+        @self.app.route('/games')
+        def games():
+            return render_template('games.html')
+
         @self.app.route('/favicon.ico')
         def favicon():
             return send_from_directory(join(path, 'web'), 'favicon.ico', mimetype='image/x-icon')
@@ -398,11 +403,25 @@ class WebGameThread(threading.Thread):
                 if func:
                     func()
                     success = True
+            elif action == 'TT':
+                global APIIitegration
+                if APIIitegration:
+                    APIIitegration = False
+                    SyncWithSherwood.selected_tournament_number = None
+                    SpeakIt.put("Tournament integration off")
+                    success = True
+                else:
+                    tournaments = ListTournaments()
+                    if tournaments:
+                        emit('tournament_list', {'tournaments': tournaments})
+                        success = True
+                    else:
+                        SpeakIt.put("No active tournaments found")
             else:
                 ctrl_map = {
                     'GT': pygame.K_5,       'NG': pygame.K_RIGHT,
                     'FG': pygame.K_UP,      'RD': pygame.K_DOWN,
-                    'AI': pygame.K_BACKSPACE, 'TT': pygame.K_3,
+                    'AI': pygame.K_BACKSPACE,
                     'TM': pygame.K_7,       'MV': pygame.K_9,
                 }
                 key = ctrl_map.get(action)
@@ -416,6 +435,49 @@ class WebGameThread(threading.Thread):
         @self.socketio.on('request_state')
         def handle_request_state():
             emit('state_update', self._get_full_state())
+
+        @self.socketio.on('select_tournament')
+        def handle_select_tournament(data):
+            global APIIitegration
+            tournament_number = data.get('tournament_number', '')
+            game_type_override = data.get('game_type_override', '')
+            if tournament_number:
+                SyncWithSherwood.selected_tournament_number = tournament_number
+                APIIitegration = True
+                SpeakIt.put("Tournament integration on")
+                GetOrUpdateGames()
+                if game_type_override:
+                    _apply_game_type_override(tournament_number, game_type_override)
+                # Skip past any default placeholder games to the first tournament game
+                _skip_default_games()
+                GetNextGame()
+            else:
+                APIIitegration = False
+                SyncWithSherwood.selected_tournament_number = None
+            self.socketio.emit('state_update', self._get_full_state())
+
+        @self.socketio.on('request_games_list')
+        def handle_request_games_list():
+            """Return all games from the database for the games picker page."""
+            games_list = _get_games_list()
+            emit('games_list', {
+                'games': games_list,
+                'nextGameNumber': NextGame.get('GameNumber', 0)
+            })
+
+        @self.socketio.on('set_next_game')
+        def handle_set_next_game(data):
+            """Set a specific game as the next game by its GameNumber."""
+            game_number = data.get('game_number', 0)
+            if game_number > 0:
+                _set_specific_next_game(game_number)
+                self.socketio.emit('state_update', self._get_full_state())
+                # Also refresh the games list for all clients on the games page
+                games_list = _get_games_list()
+                self.socketio.emit('games_list', {
+                    'games': games_list,
+                    'nextGameNumber': NextGame.get('GameNumber', 0)
+                })
 
         @self.socketio.on('admin_update')
         def handle_admin_update(data):
@@ -497,6 +559,7 @@ class WebGameThread(threading.Thread):
             'backgroundVol': int(BackgroundVol * 100),
             'autoInst': AutoInst,
             'apiIntegration': APIIitegration,
+            'selectedTournament': SyncWithSherwood.selected_tournament_number or '',
             'scoreValues': dict(ScoreValues),
             'songList': SongList,
             'defaultGameRunTime': DefaultGameRunTime,
@@ -511,6 +574,174 @@ class WebGameThread(threading.Thread):
                           allow_unsafe_werkzeug=True)
 
 
+def _apply_game_type_override(tournament_number, game_type):
+    """Override the GameType for all games in a tournament."""
+    conn = None
+    try:
+        conn = sqlite3.connect(database)
+        cur = conn.cursor()
+        cur.execute(
+            "UPDATE Games SET GameType = ? WHERE AltTournmentNum = ? AND GameStatus = 'Not Started';",
+            (game_type, tournament_number)
+        )
+        conn.commit()
+        if DeBug:
+            print("Game type override: set %s games to %s" % (cur.rowcount, game_type))
+    except Exception as error:
+        logger.error("_apply_game_type_override error: %s", error)
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+def _get_games_list():
+    """Return all games from the database for the games picker page."""
+    conn = None
+    try:
+        conn = sqlite3.connect(database)
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT GameNumber, AltGameNum, GroupNum, RoundNum,"
+            " GreenTeamName, YellowTeamName, GameType, GameStatus,"
+            " GreenTotalScore, YellowTotalScore, GameWinner"
+            " FROM Games"
+            " ORDER BY GroupNum ASC, RoundNum ASC, GameNumber ASC;"
+        )
+        rows = cur.fetchall()
+        games = []
+        for row in rows:
+            games.append({
+                'gameNumber': row[0],
+                'altGameNum': row[1] or '',
+                'groupNum': row[2] or 0,
+                'roundNum': row[3] or 0,
+                'greenTeamName': str(row[4] or 'Green'),
+                'yellowTeamName': str(row[5] or 'Yellow'),
+                'gameType': row[6] or 'Normal',
+                'gameStatus': row[7] or 'Not Started',
+                'greenScore': row[8] or 0,
+                'yellowScore': row[9] or 0,
+                'gameWinner': row[10] or ''
+            })
+        return games
+    except Exception as error:
+        logger.error("_get_games_list error: %s", error)
+        return []
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+def _set_specific_next_game(game_number):
+    """Set a specific game as the next game by directly loading it."""
+    global NextGame, CurrentGameType, GameRunTime
+    conn = None
+    try:
+        conn = sqlite3.connect(database)
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT GameNumber, AltGameNum, AltTournmentSystem,"
+            " GreenTeamName, GreenTeamNum, AltGreenTeamNum,"
+            " YellowTeamName, YellowTeamNum, AltYellowTeamNum,"
+            " GameType, ScheduledStartTime"
+            " FROM Games WHERE GameNumber = ?;", (game_number,)
+        )
+        row = cur.fetchone()
+        if row is None:
+            logger.error("_set_specific_next_game: No game found for GameNumber %s", game_number)
+            return
+
+        NextGame["GameNumber"] = row[0]
+        NextGame["AltGameNum"] = row[1]
+        NextGame["AltTournmentSystem"] = row[2]
+        NextGame["GreenTeamName"] = row[3]
+        NextGame["GreenTeamNum"] = row[4]
+        NextGame["AltGreenTeamNum"] = row[5]
+        NextGame["YellowTeamName"] = row[6]
+        NextGame["YellowTeamNum"] = row[7]
+        NextGame["AltYellowTeamNum"] = row[8]
+        NextGame["GameType"] = row[9]
+        NextGame["ScheduledStartTime"] = row[10]
+
+        # Ensure score records exist
+        try:
+            cur.execute("SELECT count(*) FROM Scores WHERE Side = 'Yellow' AND GameNumber = ?;", (game_number,))
+            cnt = cur.fetchone()
+            if cnt[0] == 0:
+                cur.execute("INSERT INTO Scores (GameNumber,Side) VALUES (?,'Yellow');", (game_number,))
+                conn.commit()
+            cur.execute("SELECT count(*) FROM Scores WHERE Side = 'Green' AND GameNumber = ?;", (game_number,))
+            cnt = cur.fetchone()
+            if cnt[0] == 0:
+                cur.execute("INSERT INTO Scores (GameNumber,Side) VALUES (?,'Green');", (game_number,))
+                conn.commit()
+        except Exception as error:
+            logger.error("_set_specific_next_game: Score record error - %s", error)
+
+    except Exception as error:
+        logger.error("_set_specific_next_game error: %s", error)
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+    # Update game type and score values
+    CurrentGameType = NextGame.get("GameType")
+    if CurrentGameType == "Normal":
+        GameRunTime = DefaultGameRunTime
+        ScoreValues.update(NormalScoreValues)
+    elif CurrentGameType == "Tournament":
+        GameRunTime = DefaultGameRunTime
+        ScoreValues.update(TournamentScoreValues)
+    elif CurrentGameType == "Elimination":
+        GameRunTime = DefaultGameRunTime
+        ScoreValues.update(NormalScoreValues)
+    elif CurrentGameType == "Sanction":
+        GameRunTime = SanctionGameRunTime
+        ScoreValues.update(NormalScoreValues)
+    else:
+        GameRunTime = DefaultGameRunTime
+        ScoreValues.update(NormalScoreValues)
+
+
+def _skip_default_games():
+    """Mark any 'Not Started' placeholder games (Green vs Yellow) as Skipped
+    so GetNextGame() advances to the first real tournament game."""
+    conn = None
+    try:
+        conn = sqlite3.connect(database)
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT GameNumber, GreenTeamName, YellowTeamName FROM Games"
+            " WHERE GameStatus = 'Not Started'"
+            " ORDER BY GroupNum ASC, RoundNum ASC, GameNumber ASC;"
+        )
+        rows = cur.fetchall()
+        for row in rows:
+            gNum, gName, yName = row[0], row[1], row[2]
+            if gName == "Green" or yName == "Yellow":
+                cur.execute("UPDATE Games SET GameStatus = 'Skipped' WHERE GameNumber = ?;", (gNum,))
+                conn.commit()
+            else:
+                break
+    except Exception as error:
+        logger.error("_skip_default_games error: %s", error)
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
 def GetNextGame(MinGameNumber=-1):
     global CurrentGame
     global NextGame
@@ -520,12 +751,38 @@ def GetNextGame(MinGameNumber=-1):
     try:
         conn = sqlite3.connect(database)
         cur = conn.cursor()
-        cur.execute("Select min(GameNumber) from Games where GameStatus = 'Not Started' and GameNumber > ?;",(MinGameNumber,) )
+        if MinGameNumber > 0:
+            # Advancing past a specific game — find the next one in group/round order
+            cur.execute("SELECT GroupNum, RoundNum FROM Games WHERE GameNumber = ?;", (MinGameNumber,))
+            skip_row = cur.fetchone()
+            if skip_row:
+                sg = skip_row[0] or 0
+                sr = skip_row[1] or 0
+                cur.execute(
+                    "SELECT GameNumber FROM Games WHERE GameStatus = 'Not Started'"
+                    " AND (GroupNum > ? OR (GroupNum = ? AND RoundNum > ?)"
+                    " OR (GroupNum = ? AND RoundNum = ? AND GameNumber > ?))"
+                    " ORDER BY GroupNum ASC, RoundNum ASC, GameNumber ASC LIMIT 1;",
+                    (sg, sg, sr, sg, sr, MinGameNumber)
+                )
+            else:
+                cur.execute(
+                    "SELECT GameNumber FROM Games WHERE GameStatus = 'Not Started'"
+                    " ORDER BY GroupNum ASC, RoundNum ASC, GameNumber ASC LIMIT 1;"
+                )
+        else:
+            cur.execute(
+                "SELECT GameNumber FROM Games WHERE GameStatus = 'Not Started'"
+                " ORDER BY GroupNum ASC, RoundNum ASC, GameNumber ASC LIMIT 1;"
+            )
         row = cur.fetchone()
-        if row[0] == None:
+        if row is None or row[0] is None:
             cur.execute("INSERT INTO Games (GameStatus) VALUES ('Not Started');")
             conn.commit()
-            cur.execute( "Select min(GameNumber) from Games where GameStatus = 'Not Started';")
+            cur.execute(
+                "SELECT GameNumber FROM Games WHERE GameStatus = 'Not Started'"
+                " ORDER BY GroupNum ASC, RoundNum ASC, GameNumber ASC LIMIT 1;"
+            )
             row = cur.fetchone()
         GameNum = row[0]
         if DeBug: print("GameNumber => " + str(GameNum))
@@ -749,6 +1006,17 @@ def ChangeScore(Team,ScoreType,Up_Down):
     CurrentGame["GreenTotalScore"] = GreenScores.get("Total")
 
     WriteGameToDB()
+
+    # Push live scores to tournament API in background thread
+    if APIIitegration and GameRunning in ("Playing", "Pause"):
+        gameNum = CurrentGame.get("GameNumber")
+        gTotal = GreenScores.get("Total", 0)
+        yTotal = YellowScores.get("Total", 0)
+        threading.Thread(
+            target=UpdateLiveScores,
+            args=(gameNum, gTotal, yTotal),
+            daemon=True
+        ).start()
 
 def Green_Hit_Up():
     ChangeScore(GreenScores,"Hit","Up")
@@ -1098,8 +1366,8 @@ def ButtonPressed(channel):
         elif channel ==  pygame.K_UP: # Pull Previous Game
             GetNextGame(0)
 
-        elif channel ==  pygame.K_DOWN: # Pull Data from Challonge
-            if DeBug: print("Pull Data from Challonge")
+        elif channel ==  pygame.K_DOWN: # Pull Data from Sherwood
+            if DeBug: print("Pull Data from Sherwood")
             if APIIitegration: GetOrUpdateGames()
         #Toggle Controls
         elif channel ==  pygame.K_BACKSPACE: # Toggle Auto Instructions
@@ -1111,14 +1379,26 @@ def ButtonPressed(channel):
                 SpeakIt.put("Auto Instructions on")
 
         elif channel ==  pygame.K_3: # Toggle API integration
-
             if DeBug: print("Toggle Tournament integration")
             if APIIitegration:
                 APIIitegration = False
+                SyncWithSherwood.selected_tournament_number = None
                 SpeakIt.put("Tournament integration off")
             else:
-                APIIitegration = True
-                SpeakIt.put("Tournament integration on")
+                tournaments = ListTournaments()
+                if tournaments:
+                    if len(tournaments) == 1:
+                        SyncWithSherwood.selected_tournament_number = tournaments[0]['tournament_number']
+                        APIIitegration = True
+                        SpeakIt.put("Tournament integration on. " + tournaments[0].get('name', ''))
+                        GetOrUpdateGames()
+                        _skip_default_games()
+                        GetNextGame()
+                    else:
+                        web_thread.socketio.emit('tournament_list', {'tournaments': tournaments})
+                        SpeakIt.put("Select a tournament")
+                else:
+                    SpeakIt.put("No active tournaments found")
         elif channel ==  pygame.K_7: # Toggle Between Game Music
             if BackgroundMusic:
                 BackgroundMusic = False
@@ -1150,11 +1430,11 @@ def DrawScoreBoard():
         if TeamColor == "Yellow":
             Team = YellowScores
             TeamLable = " Yellow:"
-            Text = CurrentGame.get("YellowTeamName")
+            Text = str(CurrentGame.get("YellowTeamName") or "Yellow")
         else:
             Team = GreenScores
             TeamLable =  "  Green:"
-            Text = CurrentGame.get("GreenTeamName")
+            Text = str(CurrentGame.get("GreenTeamName") or "Green")
 
         indent = int(435 * ScaleX)
         ls = int(68 * ScaleY)
@@ -1201,9 +1481,9 @@ def DrawScoreBoard():
             FONT_GAME.render_to(screen, (x, y), "Winner:", FontColor)
             y = y + ls
             if CurrentGame.get("GameWinner") == "Yellow":
-                Text = CurrentGame.get("YellowTeamName")
+                Text = str(CurrentGame.get("YellowTeamName") or "Yellow")
             else:
-                Text = CurrentGame.get("GreenTeamName")
+                Text = str(CurrentGame.get("GreenTeamName") or "Green")
             FONT_GAME.render_to(screen, (x + indent, y), Text, FontColor)
             y = y + ls
             if CurrentGame.get("GameWinner") == "Yellow":
@@ -1251,12 +1531,12 @@ def DrawScoreBoard():
             y = y + ls * 1.2
             FONT_GAME.render_to(screen, (x, y), "Green:", FontColor)
             y = y + ls
-            Text = NextGame.get("GreenTeamName")
+            Text = str(NextGame.get("GreenTeamName") or "")
             FONT_GAME.render_to(screen, (x + indent, y), Text, FontColor)
             y = y + ls * 1.2
             FONT_GAME.render_to(screen, (x, y), "Yellow:", FontColor)
             y = y + ls
-            Text = NextGame.get("YellowTeamName")
+            Text = str(NextGame.get("YellowTeamName") or "")
             FONT_GAME.render_to(screen, (x + indent, y), Text, FontColor)
 
         x = int(800 * ScaleX)

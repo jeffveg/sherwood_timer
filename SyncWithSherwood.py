@@ -1,0 +1,291 @@
+#!/usr/bin/env python
+
+import requests
+import sqlite3
+from os.path import join
+import os
+import logging
+
+logger = logging.getLogger('sherwood')
+
+path = join("SherwoodTimer", os.getcwd())
+database = join(path, 'stdata.db')
+
+API_BASE = "https://app.sherwoodadventure.com/api/scoring.php"
+API_KEY = "jawvoj-nikwyV-4zawfu"
+
+# Set when operator picks a tournament from the list
+selected_tournament_number = None
+
+# Track which tournaments have already had their first sync processed
+_first_sync_done = {}
+
+
+def _api_get(action, **params):
+    params["action"] = action
+    params["api_key"] = API_KEY
+    try:
+        r = requests.get(API_BASE, params=params, timeout=10)
+        r.raise_for_status()
+        return r.json()
+    except Exception as e:
+        logger.error("API GET %s error: %s", action, e)
+        return {"success": False, "error": str(e)}
+
+
+def _api_post(action, data):
+    try:
+        r = requests.post(
+            API_BASE,
+            params={"action": action, "api_key": API_KEY},
+            json=data,
+            timeout=10
+        )
+        r.raise_for_status()
+        return r.json()
+    except Exception as e:
+        logger.error("API POST %s error: %s", action, e)
+        return {"success": False, "error": str(e)}
+
+
+def ListTournaments():
+    result = _api_get("list_tournaments")
+    if result.get("success"):
+        return result.get("tournaments", [])
+    else:
+        logger.error("ListTournaments failed: %s", result.get("error"))
+        return []
+
+
+def GetOrUpdateGames():
+    if not selected_tournament_number:
+        logger.error("No tournament selected")
+        return 0
+
+    result = _api_get("get_tournament", tournament_number=selected_tournament_number)
+    if not result.get("success"):
+        logger.error("GetOrUpdateGames API error: %s", result.get("error"))
+        return 0
+
+    conn = None
+    try:
+        conn = sqlite3.connect(database)
+        cur = conn.cursor()
+
+        tournament = result.get("tournament", {})
+        matches = result.get("matches", [])
+        last_game_type = "Normal"
+
+        for m in matches:
+            # Skip matches without both teams assigned
+            if not m.get("team1_name") or not m.get("team2_name"):
+                continue
+
+            AltGameNum = m.get("match_id")
+            GroupNum = m.get("group_id") or 0
+            RoundNum = m.get("round") or 0
+            # API mapping: team1 = Green, team2 = Yellow
+            GTeamName = m.get("team1_name", "Green")
+            GTeamNum = m.get("team1_id") or 0
+            YTeamName = m.get("team2_name", "Yellow")
+            YTeamNum = m.get("team2_id") or 0
+            GameType = m.get("game_type", "Normal")
+            ScheduledStartTime = m.get("scheduled_time") or ""
+            last_game_type = GameType
+
+            try:
+                cur.execute(
+                    "INSERT INTO Games(AltGameNum, AltTournmentNum, AltTournmentSystem,"
+                    " GroupNum, RoundNum, GreenTeamName, AltGreenTeamNum,"
+                    " YellowTeamName, AltYellowTeamNum, GameType, ScheduledStartTime)"
+                    " VALUES(?, ?, 'Sherwood', ?, ?, ?, ?, ?, ?, ?, ?)"
+                    " ON CONFLICT(AltGameNum) DO UPDATE SET"
+                    " GreenTeamName = excluded.GreenTeamName,"
+                    " YellowTeamName = excluded.YellowTeamName,"
+                    " GameType = excluded.GameType;",
+                    (str(AltGameNum), selected_tournament_number,
+                     GroupNum, RoundNum, GTeamName, GTeamNum,
+                     YTeamName, YTeamNum, GameType, ScheduledStartTime)
+                )
+                conn.commit()
+            except Exception as error:
+                logger.error("Database Error: Could not save/update game - %s", error)
+
+        # Skip default-named games on first sync for Tournament type
+        if last_game_type == "Tournament" and selected_tournament_number not in _first_sync_done:
+            _first_sync_done[selected_tournament_number] = True
+            try:
+                cur.execute(
+                    "SELECT GameNumber, GreenTeamName, YellowTeamName FROM Games"
+                    " WHERE GameStatus = 'Not Started' AND AltTournmentNum = ?"
+                    " ORDER BY GameNumber ASC;",
+                    (selected_tournament_number,)
+                )
+                rows = cur.fetchall()
+                for row in rows:
+                    gNum, gName, yName = row[0], row[1], row[2]
+                    if gName == "Green" or yName == "Yellow":
+                        cur.execute("UPDATE Games SET GameStatus = 'Skipped' WHERE GameNumber = ?;", (gNum,))
+                        conn.commit()
+                        logger.info("Tournament: Skipped default game #%s (%s vs %s)", gNum, gName, yName)
+                    else:
+                        break
+
+            except Exception as error:
+                logger.error("Database Error: Could not skip default games - %s", error)
+
+        return 1
+    except Exception as error:
+        logger.error("GetOrUpdateGames error: %s", error)
+        return 0
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+def UpdateLiveScores(GameNum, greenScore, yellowScore):
+    """Push live scores to the tournament API during gameplay (non-final)."""
+    conn = None
+    try:
+        conn = sqlite3.connect(database)
+        cur = conn.cursor()
+        cur.execute("SELECT AltGameNum FROM Games WHERE GameNumber = ?;", (GameNum,))
+        row = cur.fetchone()
+        if row is None:
+            return 0
+
+        match_id = row[0]
+        result = _api_post("update_score", {
+            "match_id": int(match_id),
+            "team1_score": greenScore,     # team1 = Green
+            "team2_score": yellowScore     # team2 = Yellow
+        })
+
+        if not result.get("success"):
+            logger.error("UpdateLiveScores API error: %s", result.get("error"))
+            return 0
+        return 1
+    except Exception as error:
+        logger.error("UpdateLiveScores error: %s", error)
+        return 0
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+def StartMatch(GameNum):
+    conn = None
+    try:
+        conn = sqlite3.connect(database)
+        cur = conn.cursor()
+        cur.execute("SELECT AltGameNum FROM Games WHERE GameNumber = ?;", (GameNum,))
+        row = cur.fetchone()
+        if row is None:
+            logger.error("StartMatch: No game found for GameNumber %s", GameNum)
+            return 0
+
+        match_id = row[0]
+        result = _api_post("start_match", {"match_id": int(match_id)})
+
+        if result.get("success"):
+            return 1
+        else:
+            logger.error("StartMatch API error: %s", result.get("error"))
+            return 0
+    except Exception as error:
+        logger.error("StartMatch error: %s", error)
+        return 0
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+def EndMatch(GameNum):
+    conn = None
+    try:
+        conn = sqlite3.connect(database)
+        cur = conn.cursor()
+        cur.execute("SELECT AltGameNum FROM Games WHERE GameNumber = ?;", (GameNum,))
+        row = cur.fetchone()
+        if row is None:
+            logger.error("EndMatch: No game found for GameNumber %s", GameNum)
+            return 0
+
+        match_id = row[0]
+        result = _api_post("end_match", {"match_id": int(match_id)})
+
+        if result.get("success"):
+            return 1
+        else:
+            logger.error("EndMatch API error: %s", result.get("error"))
+            return 0
+    except Exception as error:
+        logger.error("EndMatch error: %s", error)
+        return 0
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+def UploadScores(GameNum):
+    conn = None
+    try:
+        conn = sqlite3.connect(database)
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT AltGameNum, AltYellowTeamNum, YellowTotalScore,"
+            " AltGreenTeamNum, GreenTotalScore, GameStatus, GameWinner"
+            " FROM Games WHERE GameNumber = ?;",
+            (GameNum,)
+        )
+        row = cur.fetchone()
+        if row is None:
+            logger.error("UploadScores: No game found for GameNumber %s", GameNum)
+            return 0
+
+        match_id = row[0]
+        yellow_team_id = row[1]    # team2 in API
+        yellow_score = row[2]      # team2_score
+        green_team_id = row[3]     # team1 in API
+        green_score = row[4]       # team1_score
+        game_status = row[5]
+        game_winner = row[6]
+
+        if game_status == "Finished":
+            if game_winner == "Yellow":
+                winner_id = yellow_team_id
+            else:
+                winner_id = green_team_id
+
+            result = _api_post("submit_score", {
+                "match_id": int(match_id),
+                "team1_score": green_score,    # team1 = Green
+                "team2_score": yellow_score,   # team2 = Yellow
+                "winner_id": int(winner_id)
+            })
+
+            if not result.get("success"):
+                logger.error("UploadScores API error: %s", result.get("error"))
+                return 0
+        return 1
+    except Exception as error:
+        logger.error("UploadScores error: %s", error)
+        return 0
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass

@@ -6,4 +6,3 @@ requests
 flask
 flask-socketio
 simple-websocket
-pychallonge
