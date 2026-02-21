@@ -2,7 +2,9 @@
 
 import requests
 import sqlite3
+import threading
 from os.path import join
+from time import sleep
 import os
 import logging
 
@@ -19,6 +21,15 @@ selected_tournament_number = None
 
 # Track which tournaments have already had their first sync processed
 _first_sync_done = {}
+
+# Queue of game numbers whose final scores still need uploading
+_pending_uploads = []
+_pending_lock = threading.Lock()
+
+# Track the latest live scores that need pushing (set by ChangeScore, consumed by sync thread)
+_live_score_dirty = False
+_live_score_data = {}  # {"game_number": int, "green": int, "yellow": int}
+_live_lock = threading.Lock()
 
 
 def _api_get(action, **params):
@@ -91,6 +102,7 @@ def GetOrUpdateGames():
             YTeamNum = m.get("team2_id") or 0
             GameType = m.get("game_type", "Normal")
             ScheduledStartTime = m.get("scheduled_time") or ""
+            ApiStatus = m.get("status", "pending")        # pending/in_progress/completed/bye
             last_game_type = GameType
 
             try:
@@ -110,6 +122,21 @@ def GetOrUpdateGames():
                 conn.commit()
             except Exception as error:
                 logger.error("Database Error: Could not save/update game - %s", error)
+
+            # Handle forfeits / completed-on-server: if the API says a match is
+            # completed or a bye but we still have it as 'Not Started', skip it
+            if ApiStatus in ("completed", "bye"):
+                try:
+                    cur.execute(
+                        "UPDATE Games SET GameStatus = 'Skipped'"
+                        " WHERE AltGameNum = ? AND GameStatus = 'Not Started';",
+                        (str(AltGameNum),)
+                    )
+                    if cur.rowcount > 0:
+                        conn.commit()
+                        logger.info("Sync: Skipped game (AltGameNum %s) — API status '%s'", AltGameNum, ApiStatus)
+                except Exception as error:
+                    logger.error("Database Error: Could not skip forfeited game - %s", error)
 
         # Skip default-named games on first sync for Tournament type
         if last_game_type == "Tournament" and selected_tournament_number not in _first_sync_done:
@@ -146,37 +173,87 @@ def GetOrUpdateGames():
                 pass
 
 
-def UpdateLiveScores(GameNum, greenScore, yellowScore):
-    """Push live scores to the tournament API during gameplay (non-final)."""
+def MarkLiveScoreDirty(gameNum, greenScore, yellowScore):
+    """Flag that live scores need pushing. Called from ChangeScore in run.py."""
+    global _live_score_dirty, _live_score_data
+    with _live_lock:
+        _live_score_dirty = True
+        _live_score_data = {"game_number": gameNum, "green": greenScore, "yellow": yellowScore}
+
+
+def _push_live_scores():
+    """Push the latest live scores if dirty. Returns True on success or nothing to do."""
+    global _live_score_dirty
+    with _live_lock:
+        if not _live_score_dirty:
+            return True
+        data = dict(_live_score_data)
+
     conn = None
     try:
         conn = sqlite3.connect(database)
         cur = conn.cursor()
-        cur.execute("SELECT AltGameNum FROM Games WHERE GameNumber = ?;", (GameNum,))
+        cur.execute("SELECT AltGameNum FROM Games WHERE GameNumber = ?;", (data["game_number"],))
         row = cur.fetchone()
         if row is None:
-            return 0
+            return True  # nothing to push
 
         match_id = row[0]
         result = _api_post("update_score", {
             "match_id": int(match_id),
-            "team1_score": greenScore,     # team1 = Green
-            "team2_score": yellowScore     # team2 = Yellow
+            "team1_score": data["green"],     # team1 = Green
+            "team2_score": data["yellow"]     # team2 = Yellow
         })
 
-        if not result.get("success"):
-            logger.error("UpdateLiveScores API error: %s", result.get("error"))
-            return 0
-        return 1
+        if result.get("success"):
+            with _live_lock:
+                _live_score_dirty = False
+            return True
+        else:
+            logger.error("_push_live_scores API error: %s", result.get("error"))
+            return False
     except Exception as error:
-        logger.error("UpdateLiveScores error: %s", error)
-        return 0
+        logger.error("_push_live_scores error: %s", error)
+        return False
     finally:
         if conn:
             try:
                 conn.close()
             except Exception:
                 pass
+
+
+def QueueUpload(gameNum):
+    """Add a game to the pending uploads queue for retry."""
+    with _pending_lock:
+        if gameNum not in _pending_uploads:
+            _pending_uploads.append(gameNum)
+            logger.info("Queued game #%s for upload retry", gameNum)
+
+
+def RetryPendingUploads():
+    """Attempt to upload scores for any games in the pending queue. Returns count remaining."""
+    with _pending_lock:
+        pending = list(_pending_uploads)
+
+    if not pending:
+        return 0
+
+    still_pending = []
+    for gameNum in pending:
+        result = UploadScores(gameNum)
+        if result == 1:
+            logger.info("Retry upload succeeded for game #%s", gameNum)
+        else:
+            still_pending.append(gameNum)
+
+    with _pending_lock:
+        # Remove successfully uploaded, keep failures + any newly added
+        for gameNum in pending:
+            if gameNum not in still_pending and gameNum in _pending_uploads:
+                _pending_uploads.remove(gameNum)
+
+    return len(still_pending)
 
 
 def StartMatch(GameNum):

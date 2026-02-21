@@ -574,6 +574,74 @@ class WebGameThread(threading.Thread):
                           allow_unsafe_werkzeug=True)
 
 
+# Periodic sync thread — handles live score pushes, pending upload retries,
+# and tournament re-sync for forfeits / team name changes
+class APISyncThread(threading.Thread):
+
+    LIVE_SCORE_INTERVAL = 10    # seconds between live score pushes
+    RESYNC_INTERVAL = 30        # seconds between full tournament re-syncs
+    RETRY_INTERVAL = 15         # seconds between pending upload retries
+
+    def __init__(self):
+        threading.Thread.__init__(self)
+        self.daemon = True
+        self._tick = 0
+        self.start()
+
+    def run(self):
+        while True:
+            try:
+                sleep(1)
+                self._tick += 1
+
+                if not APIIitegration:
+                    continue
+
+                # Push live scores every LIVE_SCORE_INTERVAL seconds
+                if self._tick % self.LIVE_SCORE_INTERVAL == 0:
+                    if GameRunning in ("Playing", "Pause"):
+                        SyncWithSherwood._push_live_scores()
+
+                # Retry pending final score uploads
+                if self._tick % self.RETRY_INTERVAL == 0:
+                    remaining = RetryPendingUploads()
+                    if remaining > 0:
+                        logger.info("APISyncThread: %d uploads still pending", remaining)
+
+                # Re-sync tournament data to catch forfeits & name changes
+                if self._tick % self.RESYNC_INTERVAL == 0:
+                    if GameRunning not in ("Playing", "Pause"):
+                        old_next = NextGame.get("GameNumber", 0)
+                        GetOrUpdateGames()
+                        # If current next game was skipped (forfeit), advance
+                        _check_next_game_still_valid(old_next)
+
+            except Exception as error:
+                logger.error("APISyncThread error: %s", error)
+
+
+def _check_next_game_still_valid(old_next_game_number):
+    """If the current NextGame was skipped by a re-sync (forfeit), advance."""
+    conn = None
+    try:
+        conn = sqlite3.connect(database)
+        cur = conn.cursor()
+        cur.execute("SELECT GameStatus FROM Games WHERE GameNumber = ?;",
+                    (old_next_game_number,))
+        row = cur.fetchone()
+        if row and row[0] in ("Skipped", "Finished"):
+            logger.info("Next game #%s was skipped/finished by sync, advancing", old_next_game_number)
+            GetNextGame()
+    except Exception as error:
+        logger.error("_check_next_game_still_valid error: %s", error)
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
 def _apply_game_type_override(tournament_number, game_type):
     """Override the GameType for all games in a tournament."""
     conn = None
@@ -1007,16 +1075,13 @@ def ChangeScore(Team,ScoreType,Up_Down):
 
     WriteGameToDB()
 
-    # Push live scores to tournament API in background thread
+    # Flag live scores as dirty so the periodic sync thread pushes them
     if APIIitegration and GameRunning in ("Playing", "Pause"):
-        gameNum = CurrentGame.get("GameNumber")
-        gTotal = GreenScores.get("Total", 0)
-        yTotal = YellowScores.get("Total", 0)
-        threading.Thread(
-            target=UpdateLiveScores,
-            args=(gameNum, gTotal, yTotal),
-            daemon=True
-        ).start()
+        MarkLiveScoreDirty(
+            CurrentGame.get("GameNumber"),
+            GreenScores.get("Total", 0),
+            YellowScores.get("Total", 0)
+        )
 
 def Green_Hit_Up():
     ChangeScore(GreenScores,"Hit","Up")
@@ -1140,9 +1205,13 @@ def NormalGameEnd():
             attempts += 1
         else:
             break
-    if APIIitegration: 
-        print("upload to API game ", CurrentGame.get("GameNumber"))
-        UploadScores(CurrentGame.get("GameNumber"))
+    if APIIitegration:
+        gameNum = CurrentGame.get("GameNumber")
+        logger.info("Upload to API game %s", gameNum)
+        result = UploadScores(gameNum)
+        if result != 1:
+            # Connection failed — queue for retry by the sync thread
+            QueueUpload(gameNum)
         GetOrUpdateGames()
     GetNextGame()
 
@@ -1645,6 +1714,7 @@ GetNextGame()
 DrawScoreBoard() 
 
 web_thread = WebGameThread()
+sync_thread = APISyncThread()
 broadcast_tick = 0
 
 while 1:
