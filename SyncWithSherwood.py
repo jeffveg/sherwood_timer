@@ -26,10 +26,58 @@ _first_sync_done = {}
 _pending_uploads = []
 _pending_lock = threading.Lock()
 
+# DB migration flag — ensure BracketType / MatchNum columns exist
+_db_migrated = False
+
+
+# SQL fragment for bracket ordering: round_robin first, then winners, losers, grand_final
+BRACKET_ORDER_SQL = (
+    "CASE BracketType"
+    " WHEN 'round_robin' THEN 0"
+    " WHEN 'winners' THEN 1"
+    " WHEN 'losers' THEN 2"
+    " WHEN 'grand_final' THEN 3"
+    " ELSE 0 END"
+)
+
+# Full sort order used everywhere
+GAME_SORT_SQL = BRACKET_ORDER_SQL + ", GroupNum ASC, RoundNum ASC, MatchNum ASC, GameNumber ASC"
+
 # Track the latest live scores that need pushing (set by ChangeScore, consumed by sync thread)
 _live_score_dirty = False
 _live_score_data = {}  # {"game_number": int, "green": int, "yellow": int}
 _live_lock = threading.Lock()
+
+
+def _ensure_db_columns():
+    """Add BracketType and MatchNum columns if they don't exist yet."""
+    global _db_migrated
+    if _db_migrated:
+        return
+    conn = None
+    try:
+        conn = sqlite3.connect(database)
+        cur = conn.cursor()
+        # Check existing columns
+        cur.execute("PRAGMA table_info(Games);")
+        columns = [row[1] for row in cur.fetchall()]
+        if "BracketType" not in columns:
+            cur.execute("ALTER TABLE Games ADD COLUMN BracketType TEXT DEFAULT 'round_robin';")
+            conn.commit()
+            logger.info("DB migration: Added BracketType column")
+        if "MatchNum" not in columns:
+            cur.execute("ALTER TABLE Games ADD COLUMN MatchNum INT DEFAULT 0;")
+            conn.commit()
+            logger.info("DB migration: Added MatchNum column")
+        _db_migrated = True
+    except Exception as error:
+        logger.error("DB migration error: %s", error)
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
 
 
 def _api_get(action, **params):
@@ -73,6 +121,8 @@ def GetOrUpdateGames():
         logger.error("No tournament selected")
         return 0
 
+    _ensure_db_columns()
+
     result = _api_get("get_tournament", tournament_number=selected_tournament_number)
     if not result.get("success"):
         logger.error("GetOrUpdateGames API error: %s", result.get("error"))
@@ -95,6 +145,8 @@ def GetOrUpdateGames():
             AltGameNum = m.get("match_id")
             GroupNum = m.get("group_id") or 0
             RoundNum = m.get("round") or 0
+            MatchNum = m.get("match_number") or 0
+            BracketType = m.get("bracket_type") or "round_robin"
             # API mapping: team1 = Green, team2 = Yellow
             GTeamName = m.get("team1_name", "Green")
             GTeamNum = m.get("team1_id") or 0
@@ -108,15 +160,19 @@ def GetOrUpdateGames():
             try:
                 cur.execute(
                     "INSERT INTO Games(AltGameNum, AltTournmentNum, AltTournmentSystem,"
-                    " GroupNum, RoundNum, GreenTeamName, AltGreenTeamNum,"
+                    " GroupNum, RoundNum, MatchNum, BracketType,"
+                    " GreenTeamName, AltGreenTeamNum,"
                     " YellowTeamName, AltYellowTeamNum, GameType, ScheduledStartTime)"
-                    " VALUES(?, ?, 'Sherwood', ?, ?, ?, ?, ?, ?, ?, ?)"
+                    " VALUES(?, ?, 'Sherwood', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
                     " ON CONFLICT(AltGameNum) DO UPDATE SET"
                     " GreenTeamName = excluded.GreenTeamName,"
                     " YellowTeamName = excluded.YellowTeamName,"
-                    " GameType = excluded.GameType;",
+                    " GameType = excluded.GameType,"
+                    " BracketType = excluded.BracketType,"
+                    " MatchNum = excluded.MatchNum;",
                     (str(AltGameNum), selected_tournament_number,
-                     GroupNum, RoundNum, GTeamName, GTeamNum,
+                     GroupNum, RoundNum, MatchNum, BracketType,
+                     GTeamName, GTeamNum,
                      YTeamName, YTeamNum, GameType, ScheduledStartTime)
                 )
                 conn.commit()
@@ -145,7 +201,7 @@ def GetOrUpdateGames():
                 cur.execute(
                     "SELECT GameNumber, GreenTeamName, YellowTeamName FROM Games"
                     " WHERE GameStatus = 'Not Started' AND AltTournmentNum = ?"
-                    " ORDER BY GameNumber ASC;",
+                    " ORDER BY " + GAME_SORT_SQL + ";",
                     (selected_tournament_number,)
                 )
                 rows = cur.fetchall()

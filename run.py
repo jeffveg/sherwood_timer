@@ -674,9 +674,9 @@ def _get_games_list():
         cur.execute(
             "SELECT GameNumber, AltGameNum, GroupNum, RoundNum,"
             " GreenTeamName, YellowTeamName, GameType, GameStatus,"
-            " GreenTotalScore, YellowTotalScore, GameWinner"
+            " GreenTotalScore, YellowTotalScore, GameWinner, BracketType"
             " FROM Games"
-            " ORDER BY GroupNum ASC, RoundNum ASC, GameNumber ASC;"
+            " ORDER BY " + GAME_SORT_SQL + ";"
         )
         rows = cur.fetchall()
         games = []
@@ -692,7 +692,8 @@ def _get_games_list():
                 'gameStatus': row[7] or 'Not Started',
                 'greenScore': row[8] or 0,
                 'yellowScore': row[9] or 0,
-                'gameWinner': row[10] or ''
+                'gameWinner': row[10] or '',
+                'bracketType': row[11] or 'round_robin'
             })
         return games
     except Exception as error:
@@ -790,7 +791,7 @@ def _skip_default_games():
         cur.execute(
             "SELECT GameNumber, GreenTeamName, YellowTeamName FROM Games"
             " WHERE GameStatus = 'Not Started'"
-            " ORDER BY GroupNum ASC, RoundNum ASC, GameNumber ASC;"
+            " ORDER BY " + GAME_SORT_SQL + ";"
         )
         rows = cur.fetchall()
         for row in rows:
@@ -819,39 +820,39 @@ def GetNextGame(MinGameNumber=-1):
     try:
         conn = sqlite3.connect(database)
         cur = conn.cursor()
-        if MinGameNumber > 0:
-            # Advancing past a specific game — find the next one in group/round order
-            cur.execute("SELECT GroupNum, RoundNum FROM Games WHERE GameNumber = ?;", (MinGameNumber,))
-            skip_row = cur.fetchone()
-            if skip_row:
-                sg = skip_row[0] or 0
-                sr = skip_row[1] or 0
-                cur.execute(
-                    "SELECT GameNumber FROM Games WHERE GameStatus = 'Not Started'"
-                    " AND (GroupNum > ? OR (GroupNum = ? AND RoundNum > ?)"
-                    " OR (GroupNum = ? AND RoundNum = ? AND GameNumber > ?))"
-                    " ORDER BY GroupNum ASC, RoundNum ASC, GameNumber ASC LIMIT 1;",
-                    (sg, sg, sr, sg, sr, MinGameNumber)
-                )
-            else:
-                cur.execute(
-                    "SELECT GameNumber FROM Games WHERE GameStatus = 'Not Started'"
-                    " ORDER BY GroupNum ASC, RoundNum ASC, GameNumber ASC LIMIT 1;"
-                )
-        else:
-            cur.execute(
-                "SELECT GameNumber FROM Games WHERE GameStatus = 'Not Started'"
-                " ORDER BY GroupNum ASC, RoundNum ASC, GameNumber ASC LIMIT 1;"
-            )
-        row = cur.fetchone()
+        # Get all not-started games in proper bracket/round/match order
+        cur.execute(
+            "SELECT GameNumber FROM Games WHERE GameStatus = 'Not Started'"
+            " ORDER BY " + GAME_SORT_SQL + ";"
+        )
+        all_rows = cur.fetchall()
+
+        row = None
+        if MinGameNumber > 0 and all_rows:
+            # Advancing past a specific game — find it in the list, take the next one
+            found = False
+            for r in all_rows:
+                if found:
+                    row = r
+                    break
+                if r[0] == MinGameNumber:
+                    found = True
+            # If not found or no game after it, fall through to None
+        elif all_rows:
+            row = all_rows[0]
+
         if row is None or row[0] is None:
-            cur.execute("INSERT INTO Games (GameStatus) VALUES ('Not Started');")
-            conn.commit()
-            cur.execute(
-                "SELECT GameNumber FROM Games WHERE GameStatus = 'Not Started'"
-                " ORDER BY GroupNum ASC, RoundNum ASC, GameNumber ASC LIMIT 1;"
-            )
-            row = cur.fetchone()
+            if not all_rows:
+                cur.execute("INSERT INTO Games (GameStatus) VALUES ('Not Started');")
+                conn.commit()
+                cur.execute(
+                    "SELECT GameNumber FROM Games WHERE GameStatus = 'Not Started'"
+                    " ORDER BY " + GAME_SORT_SQL + " LIMIT 1;"
+                )
+                row = cur.fetchone()
+            else:
+                # MinGameNumber was the last game; wrap to the first
+                row = all_rows[0]
         GameNum = row[0]
         if DeBug: print("GameNumber => " + str(GameNum))
         cur.execute("Select  GameNumber" \
