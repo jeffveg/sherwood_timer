@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Main Display - Sherwood Adventure Timer</title>
+    <link rel="icon" type="image/png" sizes="32x32" href="/static/../favicon-32x32.png">
+    <link rel="stylesheet" href="/static/css/main_display.css">
+</head>
+<body>
+
+    <div id="main-display">
+
+        <!-- PLAYING VIEW: Timer + Score Columns (over TimerBack) -->
+        <div id="playing-view" class="view hidden">
+            <div id="timer-display">0:00</div>
+
+            <div id="score-area">
+                <!-- Green Team (left side) -->
+                <div class="team-side" id="green-side">
+                    <div class="team-header">
+                        <span class="team-label">Green:</span>
+                        <span class="team-name" id="green-name">Green</span>
+                    </div>
+                    <div class="score-detail" id="green-hit-row">
+                        <span class="score-label">Hit:</span>
+                        <span class="score-value" id="green-hit">0</span>
+                    </div>
+                    <div class="score-detail" id="green-spot-row">
+                        <span class="score-label">Spot:</span>
+                        <span class="score-value" id="green-spot">0</span>
+                    </div>
+                    <div class="score-detail" id="green-catch-row">
+                        <span class="score-label">Catch:</span>
+                        <span class="score-value" id="green-catch">0</span>
+                    </div>
+                    <div class="score-total">
+                        <span class="total-label">Total</span>
+                        <span class="total-value" id="green-total">0</span>
+                    </div>
+                    <div class="score-detail" id="green-penalty-row">
+                        <span class="score-label">Penalty:</span>
+                        <span class="score-value" id="green-penalty">0</span>
+                    </div>
+                </div>
+
+                <!-- Yellow Team (right side) -->
+                <div class="team-side" id="yellow-side">
+                    <div class="team-header">
+                        <span class="team-label">Yellow:</span>
+                        <span class="team-name" id="yellow-name">Yellow</span>
+                    </div>
+                    <div class="score-detail" id="yellow-hit-row">
+                        <span class="score-label">Hit:</span>
+                        <span class="score-value" id="yellow-hit">0</span>
+                    </div>
+                    <div class="score-detail" id="yellow-spot-row">
+                        <span class="score-label">Spot:</span>
+                        <span class="score-value" id="yellow-spot">0</span>
+                    </div>
+                    <div class="score-detail" id="yellow-catch-row">
+                        <span class="score-label">Catch:</span>
+                        <span class="score-value" id="yellow-catch">0</span>
+                    </div>
+                    <div class="score-total">
+                        <span class="total-label">Total</span>
+                        <span class="total-value" id="yellow-total">0</span>
+                    </div>
+                    <div class="score-detail" id="yellow-penalty-row">
+                        <span class="score-label">Penalty:</span>
+                        <span class="score-value" id="yellow-penalty">0</span>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- IDLE VIEW: Winner + Next Game (over DefaultBack) -->
+        <div id="idle-view" class="view">
+            <div id="winner-section" class="hidden">
+                <div class="winner-line" id="winner-label">Winner:</div>
+                <div class="winner-line winner-indent" id="winner-name"></div>
+                <div class="winner-line winner-indent" id="winner-score"></div>
+                <div class="winner-line winner-indent" id="winner-breakdown"></div>
+            </div>
+
+            <div id="next-game-section" class="hidden">
+                <div class="next-line">Next Game:</div>
+                <div class="next-line">Green:</div>
+                <div class="next-line next-indent" id="next-green-name">---</div>
+                <div class="next-line">Yellow:</div>
+                <div class="next-line next-indent" id="next-yellow-name">---</div>
+            </div>
+        </div>
+
+        <!-- TRANSITION VIEW: Countdown / Instructions / Ready -->
+        <div id="transition-view" class="view hidden">
+            <div id="transition-teams">
+                <span class="transition-green" id="transition-green">Green</span>
+                <span class="transition-vs">vs</span>
+                <span class="transition-yellow" id="transition-yellow">Yellow</span>
+            </div>
+            <div id="transition-message">Getting Ready...</div>
+        </div>
+
+        <!-- Video overlay — fullscreen, above all views -->
+        <video id="video-overlay" class="hidden" muted playsinline></video>
+
+        <!-- Audio unmute indicator -->
+        <div id="unmute-hint">&#128263; Click for audio</div>
+
+        <!-- Song Info (bottom-left, shown when music is playing — overlays any view) -->
+        <div id="song-info" class="hidden">
+            <div id="song-title"></div>
+            <div id="song-artist"></div>
+        </div>
+
+        <!-- STATUS BAR (bottom) -->
+        <div id="status-bar">
+            <span id="status-game-type"></span>
+            <span id="status-auto-inst" class="hidden">Auto Instructions</span>
+            <span id="status-tournament" class="hidden">Tournament Integration</span>
+        </div>
+
+    </div>
+
+    <script src="/static/js/socket.io.min.js"></script>
+    <script src="/static/js/main_display.js"></script>
+</body>
+</html>

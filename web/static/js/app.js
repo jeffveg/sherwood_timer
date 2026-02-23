@@ -16,6 +16,9 @@ const DEBOUNCE_MS = 500;
 // Confirmation modal state
 let pendingConfirmAction = null;
 
+// Video playback state
+let videoPlaying = false;
+
 // ==========================================
 // DOM Element Cache
 // ==========================================
@@ -25,6 +28,7 @@ function cacheElements() {
     // Views
     el.gameHeader = document.getElementById('game-header');
     el.scoringView = document.getElementById('scoring-view');
+    el.videoControls = document.getElementById('video-controls');
     el.waitingView = document.getElementById('waiting-view');
     el.managementView = document.getElementById('management-view');
     el.connectionStatus = document.getElementById('connection-status');
@@ -50,6 +54,7 @@ function cacheElements() {
     el.pauseBtn = document.getElementById('pause-btn');
     el.pauseIcon = document.getElementById('pause-icon');
     el.pauseLabel = document.getElementById('pause-label');
+    el.gameControls = document.querySelector('.game-controls');
 
     // Waiting
     el.waitingMessage = document.getElementById('waiting-message');
@@ -111,6 +116,16 @@ socket.on('score_ack', function(data) {
     }
 });
 
+socket.on('video_start', function(data) {
+    videoPlaying = true;
+    render();
+});
+
+socket.on('video_stop', function() {
+    videoPlaying = false;
+    render();
+});
+
 socket.on('tournament_list', function(data) {
     var tournaments = data.tournaments || [];
     var select = el.tournamentSelect;
@@ -135,6 +150,7 @@ socket.on('tournament_list', function(data) {
         tournaments.forEach(function(t) {
             var opt = document.createElement('option');
             opt.value = t.tournament_number;
+            opt.dataset.name = t.name;
             opt.textContent = t.name + ' (' + t.completed_matches + '/' + t.total_matches + ')';
             select.appendChild(opt);
         });
@@ -163,45 +179,60 @@ function updateConnectionStatus(connected) {
 function render() {
     if (!state.gameRunning) return;
 
-    var isPlaying = state.gameRunning === 'Playing' || state.gameRunning === 'Pause';
-    var isTransition = ['Countdown', 'Ready', 'AutoInst', 'Stop'].indexOf(state.gameRunning) !== -1;
+    var isPlaying = state.gameRunning === 'Playing' || state.gameRunning === 'Pause' || state.gameRunning === 'Stop';
+    var isTransition = ['Countdown', 'Ready', 'AutoInst'].indexOf(state.gameRunning) !== -1;
     var isIdle = state.gameRunning === 'No' || state.gameRunning === 'Finished';
 
-    // Show/hide views
-    toggleEl(el.gameHeader, isPlaying || isTransition);
-    toggleEl(el.scoringView, isPlaying);
-    toggleEl(el.waitingView, isTransition);
-    toggleEl(el.managementView, isIdle);
+    // Show/hide views — video controls take priority when a video is playing
+    if (videoPlaying) {
+        toggleEl(el.gameHeader, false);
+        toggleEl(el.scoringView, false);
+        toggleEl(el.videoControls, true);
+        toggleEl(el.waitingView, false);
+        toggleEl(el.managementView, false);
+    } else {
+        toggleEl(el.videoControls, false);
+        toggleEl(el.gameHeader, isPlaying || isTransition);
+        toggleEl(el.scoringView, isPlaying);
+        toggleEl(el.waitingView, isTransition);
+        toggleEl(el.managementView, isIdle);
 
-    if (isPlaying) {
-        renderScoringView();
-    }
-    if (isTransition) {
-        renderWaitingView();
-    }
-    if (isIdle) {
-        renderManagementView();
-    }
+        if (isPlaying) {
+            renderScoringView();
+        }
+        if (isTransition) {
+            renderWaitingView();
+        }
+        if (isIdle) {
+            renderManagementView();
+        }
 
-    // Always update header when visible
-    if (isPlaying || isTransition) {
-        renderHeader();
+        // Always update header when visible
+        if (isPlaying || isTransition) {
+            renderHeader();
+        }
     }
 }
 
 function renderHeader() {
     // Timer
-    var secs = state.secondsLeft || 0;
-    var negative = secs < 0;
-    var absSecs = Math.abs(secs);
-    var min = Math.floor(absSecs / 60);
-    var sec = absSecs % 60;
-    var timerStr = (negative ? '-' : '') + min + ':' + String(sec).padStart(2, '0');
-    el.timerDisplay.textContent = timerStr;
+    var isStopped = state.gameRunning === 'Stop';
+    if (isStopped) {
+        el.timerDisplay.textContent = 'Final Scores';
+    } else {
+        var secs = state.secondsLeft || 0;
+        var negative = secs < 0;
+        var absSecs = Math.abs(secs);
+        var min = Math.floor(absSecs / 60);
+        var sec = absSecs % 60;
+        var timerStr = (negative ? '-' : '') + min + ':' + String(sec).padStart(2, '0');
+        el.timerDisplay.textContent = timerStr;
+    }
 
     // Timer styling
-    el.timerDisplay.classList.toggle('overtime', negative);
+    el.timerDisplay.classList.toggle('overtime', !isStopped && (state.secondsLeft || 0) < 0);
     el.timerDisplay.classList.toggle('paused', state.gameRunning === 'Pause');
+    el.timerDisplay.classList.toggle('finalizing', isStopped);
 
     // Scores
     var gs = state.greenScores || {};
@@ -238,8 +269,12 @@ function renderScoringView() {
     toggleButtons('.catch-btn', showCatchPenalty);
     toggleButtons('.penalty-btn', showCatchPenalty);
 
-    // Early Win button only visible for Elimination
-    toggleButtons('.elim-only-btn', gt === 'Elimination');
+    // Early Win button only visible for Elimination during active play
+    toggleButtons('.elim-only-btn', gt === 'Elimination' && state.gameRunning !== 'Stop');
+
+    // Hide game controls (Pause/Stop/EarlyWin) during score finalization
+    var isStopped = state.gameRunning === 'Stop';
+    toggleEl(el.gameControls, !isStopped);
 
     // Update pause button to reflect current state
     if (el.pauseBtn) {
@@ -360,11 +395,15 @@ function confirmAction() {
 // Tournament Selection Modal
 // ==========================================
 function selectTournament() {
-    var selected = el.tournamentSelect.value;
+    var select = el.tournamentSelect;
+    var selected = select.value;
     if (selected) {
+        var selectedOption = select.options[select.selectedIndex];
+        var tournamentName = selectedOption ? (selectedOption.dataset.name || selectedOption.textContent) : selected;
         var gameTypeOverride = el.tournamentGameType.value;
         socket.emit('select_tournament', {
             tournament_number: selected,
+            tournament_name: tournamentName,
             game_type_override: gameTypeOverride
         });
         hideTournament();
@@ -489,6 +528,21 @@ document.addEventListener('DOMContentLoaded', function() {
         if (e.target === el.tournamentOverlay) {
             hideTournament();
         }
+    });
+
+    // Video control buttons (data-video-action)
+    var videoButtons = document.querySelectorAll('[data-video-action]');
+    videoButtons.forEach(function(btn) {
+        btn.addEventListener('touchend', function(e) {
+            e.preventDefault();
+            var action = btn.dataset.videoAction;
+            if (action) socket.emit('video_control', { action: action });
+        });
+        btn.addEventListener('click', function(e) {
+            if (e.sourceCapabilities && e.sourceCapabilities.firesTouchEvents) return;
+            var action = btn.dataset.videoAction;
+            if (action) socket.emit('video_control', { action: action });
+        });
     });
 
     // Request full state on load

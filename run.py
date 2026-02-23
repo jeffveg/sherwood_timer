@@ -68,7 +68,7 @@ GameEnd          = datetime.now()
 GameRunTime      = DefaultGameRunTime
 SecondsLeft      = 0
 LastCountSec     = 0
-SecondsPaused    = 0
+PauseStart       = None
 CurrentVid       = "Startup"
 CurrentGameType  = "Elimination"
 BackgroundMusic  = True
@@ -77,6 +77,11 @@ OutdoorMode      = False
 AutoInst         = False 
 APIIitegration   = False
 AnnouncedOvertime = False
+# Video control flags — set by the web socketio thread, read by the
+# pygame main thread inside PlayAVideo().  Simple boolean assignments
+# are atomic under CPython's GIL so no lock is needed.
+video_pause_requested = False
+video_stop_requested  = False
 
 NormalScoreValues = {
 "Hit"       : 1,
@@ -197,7 +202,7 @@ ScaleY = SHeight / REF_H
 DefaultBack = pygame.transform.scale(
     pygame.image.load(join(path,"Images/DefaultBack.jpg")), (SWidth, SHeight))
 TimerBack = pygame.transform.scale(
-    pygame.image.load(join(path,"Images/TimerBack2.bmp")), (SWidth, SHeight))
+    pygame.image.load(join(path,"Images/TimerBack.jpg")), (SWidth, SHeight))
 BlackTimerBack = pygame.transform.scale(
     pygame.image.load(join(path,"Images/BlackTimerBack.jpg")), (SWidth, SHeight))
 Logo = pygame.image.load(join(path,"Images/logo.png"))
@@ -360,6 +365,22 @@ class WebGameThread(threading.Thread):
         def games():
             return render_template('games.html')
 
+        @self.app.route('/main_display')
+        def main_display():
+            return render_template('main_display.html')
+
+        @self.app.route('/scorer')
+        def scorer():
+            return render_template('scorer.html')
+
+        @self.app.route('/images/<path:filename>')
+        def serve_image(filename):
+            return send_from_directory(join(path, 'Images'), filename)
+
+        @self.app.route('/video/<path:filename>')
+        def serve_video(filename):
+            return send_from_directory(join(path, 'Video'), filename)
+
         @self.app.route('/favicon.ico')
         def favicon():
             return send_from_directory(join(path, 'web'), 'favicon.ico', mimetype='image/x-icon')
@@ -388,7 +409,7 @@ class WebGameThread(threading.Thread):
                 pygame.mixer.Sound.play(EarlyWin)
                 EarlyWinGameEnd()
                 success = True
-            elif GameRunning == "Playing":
+            elif GameRunning == "Playing" or (GameRunning == "Stop" and (datetime.now()-DelayScreen).total_seconds() <= 10):
                 score_map = {
                     'GHU': Green_Hit_Up,    'GHD': Green_Hit_Down,
                     'GSU': Green_Spot_Up,   'GSD': Green_Spot_Down,
@@ -408,6 +429,8 @@ class WebGameThread(threading.Thread):
                 if APIIitegration:
                     APIIitegration = False
                     SyncWithSherwood.selected_tournament_number = None
+                    SyncWithSherwood.selected_tournament_name = None
+                    SyncWithSherwood.game_type_override = None
                     SpeakIt.put("Tournament integration off")
                     success = True
                 else:
@@ -419,8 +442,7 @@ class WebGameThread(threading.Thread):
                         SpeakIt.put("No active tournaments found")
             else:
                 ctrl_map = {
-                    'GT': pygame.K_5,       'NG': pygame.K_RIGHT,
-                    'FG': pygame.K_UP,      'RD': pygame.K_DOWN,
+                    'GT': pygame.K_5,       'RD': pygame.K_DOWN,
                     'AI': pygame.K_BACKSPACE,
                     'TM': pygame.K_7,       'MV': pygame.K_9,
                 }
@@ -440,9 +462,12 @@ class WebGameThread(threading.Thread):
         def handle_select_tournament(data):
             global APIIitegration
             tournament_number = data.get('tournament_number', '')
+            tournament_name = data.get('tournament_name', '')
             game_type_override = data.get('game_type_override', '')
             if tournament_number:
                 SyncWithSherwood.selected_tournament_number = tournament_number
+                SyncWithSherwood.selected_tournament_name = tournament_name
+                SyncWithSherwood.game_type_override = game_type_override or None
                 APIIitegration = True
                 SpeakIt.put("Tournament integration on")
                 GetOrUpdateGames()
@@ -454,6 +479,8 @@ class WebGameThread(threading.Thread):
             else:
                 APIIitegration = False
                 SyncWithSherwood.selected_tournament_number = None
+                SyncWithSherwood.selected_tournament_name = None
+                SyncWithSherwood.game_type_override = None
             self.socketio.emit('state_update', self._get_full_state())
 
         @self.socketio.on('request_games_list')
@@ -529,6 +556,17 @@ class WebGameThread(threading.Thread):
             emit('admin_ack', {'setting': setting, 'success': success})
             self.socketio.emit('state_update', self._get_full_state())
 
+        @self.socketio.on('video_control')
+        def handle_video_control(data):
+            """Web client requests to pause/stop a video playing on the pygame screen.
+            Sets flags that PlayAVideo() checks each frame in the main loop."""
+            global video_pause_requested, video_stop_requested
+            action = data.get('action', '')
+            if action == 'pause':
+                video_pause_requested = True
+            elif action == 'stop':
+                video_stop_requested = True
+
     def broadcast_state(self):
         """Called from main loop to push state to all connected clients."""
         self.socketio.emit('state_update', self._get_full_state())
@@ -559,7 +597,7 @@ class WebGameThread(threading.Thread):
             'backgroundVol': int(BackgroundVol * 100),
             'autoInst': AutoInst,
             'apiIntegration': APIIitegration,
-            'selectedTournament': SyncWithSherwood.selected_tournament_number or '',
+            'selectedTournament': SyncWithSherwood.selected_tournament_name or SyncWithSherwood.selected_tournament_number or '',
             'scoreValues': dict(ScoreValues),
             'songList': SongList,
             'defaultGameRunTime': DefaultGameRunTime,
@@ -567,11 +605,85 @@ class WebGameThread(threading.Thread):
             'songListOptions': sorted([d for d in os.listdir(join(path, 'SongList'))
                                        if os.path.isdir(join(path, 'SongList', d))]),
             'outdoorMode': OutdoorMode,
+            'songTitle': SongData.title if SongData else '',
+            'songArtist': SongData.artist if SongData else '',
+            'musicPlaying': pygame.mixer.music.get_busy(),
         }
 
     def run(self):
         self.socketio.run(self.app, host='0.0.0.0', port=80,
                           allow_unsafe_werkzeug=True)
+
+
+# Periodic sync thread — handles live score pushes, pending upload retries,
+# and tournament re-sync for forfeits / team name changes
+class APISyncThread(threading.Thread):
+
+    LIVE_SCORE_INTERVAL = 10    # seconds between live score pushes
+    RESYNC_INTERVAL = 30        # seconds between full tournament re-syncs
+    RETRY_INTERVAL = 15         # seconds between pending upload retries
+
+    def __init__(self):
+        threading.Thread.__init__(self)
+        self.daemon = True
+        self._tick = 0
+        self.start()
+
+    def run(self):
+        while True:
+            try:
+                sleep(1)
+                self._tick += 1
+
+                if not APIIitegration:
+                    continue
+
+                # Push live scores every LIVE_SCORE_INTERVAL seconds
+                if self._tick % self.LIVE_SCORE_INTERVAL == 0:
+                    if GameRunning in ("Playing", "Pause"):
+                        SyncWithSherwood._push_live_scores()
+
+                # Retry pending final score uploads
+                if self._tick % self.RETRY_INTERVAL == 0:
+                    remaining = RetryPendingUploads()
+                    if remaining > 0:
+                        logger.info("APISyncThread: %d uploads still pending", remaining)
+
+                # Re-sync tournament data to catch forfeits & name changes
+                if self._tick % self.RESYNC_INTERVAL == 0:
+                    if GameRunning not in ("Playing", "Pause"):
+                        old_next = NextGame.get("GameNumber", 0)
+                        GetOrUpdateGames()
+                        # Re-apply game type override to any newly-added games
+                        if SyncWithSherwood.game_type_override and SyncWithSherwood.selected_tournament_number:
+                            _apply_game_type_override(SyncWithSherwood.selected_tournament_number, SyncWithSherwood.game_type_override)
+                        # If current next game was skipped (forfeit), advance
+                        _check_next_game_still_valid(old_next)
+
+            except Exception as error:
+                logger.error("APISyncThread error: %s", error)
+
+
+def _check_next_game_still_valid(old_next_game_number):
+    """If the current NextGame was skipped by a re-sync (forfeit), advance."""
+    conn = None
+    try:
+        conn = sqlite3.connect(database)
+        cur = conn.cursor()
+        cur.execute("SELECT GameStatus FROM Games WHERE GameNumber = ?;",
+                    (old_next_game_number,))
+        row = cur.fetchone()
+        if row and row[0] in ("Skipped", "Finished"):
+            logger.info("Next game #%s was skipped/finished by sync, advancing", old_next_game_number)
+            GetNextGame()
+    except Exception as error:
+        logger.error("_check_next_game_still_valid error: %s", error)
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
 
 
 def _apply_game_type_override(tournament_number, game_type):
@@ -606,9 +718,9 @@ def _get_games_list():
         cur.execute(
             "SELECT GameNumber, AltGameNum, GroupNum, RoundNum,"
             " GreenTeamName, YellowTeamName, GameType, GameStatus,"
-            " GreenTotalScore, YellowTotalScore, GameWinner"
+            " GreenTotalScore, YellowTotalScore, GameWinner, BracketType"
             " FROM Games"
-            " ORDER BY GroupNum ASC, RoundNum ASC, GameNumber ASC;"
+            " ORDER BY " + GAME_SORT_SQL + ";"
         )
         rows = cur.fetchall()
         games = []
@@ -624,7 +736,8 @@ def _get_games_list():
                 'gameStatus': row[7] or 'Not Started',
                 'greenScore': row[8] or 0,
                 'yellowScore': row[9] or 0,
-                'gameWinner': row[10] or ''
+                'gameWinner': row[10] or '',
+                'bracketType': row[11] or 'round_robin'
             })
         return games
     except Exception as error:
@@ -722,7 +835,7 @@ def _skip_default_games():
         cur.execute(
             "SELECT GameNumber, GreenTeamName, YellowTeamName FROM Games"
             " WHERE GameStatus = 'Not Started'"
-            " ORDER BY GroupNum ASC, RoundNum ASC, GameNumber ASC;"
+            " ORDER BY " + GAME_SORT_SQL + ";"
         )
         rows = cur.fetchall()
         for row in rows:
@@ -751,39 +864,39 @@ def GetNextGame(MinGameNumber=-1):
     try:
         conn = sqlite3.connect(database)
         cur = conn.cursor()
-        if MinGameNumber > 0:
-            # Advancing past a specific game — find the next one in group/round order
-            cur.execute("SELECT GroupNum, RoundNum FROM Games WHERE GameNumber = ?;", (MinGameNumber,))
-            skip_row = cur.fetchone()
-            if skip_row:
-                sg = skip_row[0] or 0
-                sr = skip_row[1] or 0
-                cur.execute(
-                    "SELECT GameNumber FROM Games WHERE GameStatus = 'Not Started'"
-                    " AND (GroupNum > ? OR (GroupNum = ? AND RoundNum > ?)"
-                    " OR (GroupNum = ? AND RoundNum = ? AND GameNumber > ?))"
-                    " ORDER BY GroupNum ASC, RoundNum ASC, GameNumber ASC LIMIT 1;",
-                    (sg, sg, sr, sg, sr, MinGameNumber)
-                )
-            else:
-                cur.execute(
-                    "SELECT GameNumber FROM Games WHERE GameStatus = 'Not Started'"
-                    " ORDER BY GroupNum ASC, RoundNum ASC, GameNumber ASC LIMIT 1;"
-                )
-        else:
-            cur.execute(
-                "SELECT GameNumber FROM Games WHERE GameStatus = 'Not Started'"
-                " ORDER BY GroupNum ASC, RoundNum ASC, GameNumber ASC LIMIT 1;"
-            )
-        row = cur.fetchone()
+        # Get all not-started games in proper bracket/round/match order
+        cur.execute(
+            "SELECT GameNumber FROM Games WHERE GameStatus = 'Not Started'"
+            " ORDER BY " + GAME_SORT_SQL + ";"
+        )
+        all_rows = cur.fetchall()
+
+        row = None
+        if MinGameNumber > 0 and all_rows:
+            # Advancing past a specific game — find it in the list, take the next one
+            found = False
+            for r in all_rows:
+                if found:
+                    row = r
+                    break
+                if r[0] == MinGameNumber:
+                    found = True
+            # If not found or no game after it, fall through to None
+        elif all_rows:
+            row = all_rows[0]
+
         if row is None or row[0] is None:
-            cur.execute("INSERT INTO Games (GameStatus) VALUES ('Not Started');")
-            conn.commit()
-            cur.execute(
-                "SELECT GameNumber FROM Games WHERE GameStatus = 'Not Started'"
-                " ORDER BY GroupNum ASC, RoundNum ASC, GameNumber ASC LIMIT 1;"
-            )
-            row = cur.fetchone()
+            if not all_rows:
+                cur.execute("INSERT INTO Games (GameStatus) VALUES ('Not Started');")
+                conn.commit()
+                cur.execute(
+                    "SELECT GameNumber FROM Games WHERE GameStatus = 'Not Started'"
+                    " ORDER BY " + GAME_SORT_SQL + " LIMIT 1;"
+                )
+                row = cur.fetchone()
+            else:
+                # MinGameNumber was the last game; wrap to the first
+                row = all_rows[0]
         GameNum = row[0]
         if DeBug: print("GameNumber => " + str(GameNum))
         cur.execute("Select  GameNumber" \
@@ -1007,16 +1120,13 @@ def ChangeScore(Team,ScoreType,Up_Down):
 
     WriteGameToDB()
 
-    # Push live scores to tournament API in background thread
+    # Flag live scores as dirty so the periodic sync thread pushes them
     if APIIitegration and GameRunning in ("Playing", "Pause"):
-        gameNum = CurrentGame.get("GameNumber")
-        gTotal = GreenScores.get("Total", 0)
-        yTotal = YellowScores.get("Total", 0)
-        threading.Thread(
-            target=UpdateLiveScores,
-            args=(gameNum, gTotal, yTotal),
-            daemon=True
-        ).start()
+        MarkLiveScoreDirty(
+            CurrentGame.get("GameNumber"),
+            GreenScores.get("Total", 0),
+            YellowScores.get("Total", 0)
+        )
 
 def Green_Hit_Up():
     ChangeScore(GreenScores,"Hit","Up")
@@ -1140,10 +1250,16 @@ def NormalGameEnd():
             attempts += 1
         else:
             break
-    if APIIitegration: 
-        print("upload to API game ", CurrentGame.get("GameNumber"))
-        UploadScores(CurrentGame.get("GameNumber"))
+    if APIIitegration:
+        gameNum = CurrentGame.get("GameNumber")
+        logger.info("Upload to API game %s", gameNum)
+        result = UploadScores(gameNum)
+        if result != 1:
+            # Connection failed — queue for retry by the sync thread
+            QueueUpload(gameNum)
         GetOrUpdateGames()
+        if SyncWithSherwood.game_type_override:
+            _apply_game_type_override(SyncWithSherwood.selected_tournament_number, SyncWithSherwood.game_type_override)
     GetNextGame()
 
 # Reset the scores
@@ -1161,16 +1277,23 @@ def ResetScore():
 #Pause un-pause video
 def PauseVid():
     global GameRunning
+    global GameEnd
+    global PauseStart
 
     if GameRunning == "Playing":
         pygame.mixer.music.pause()
+        PauseStart = datetime.now()
         GameRunning = "Pause"
         CurrentGame["GameStatus"] = GameRunning
     elif GameRunning == "Pause":
         pygame.mixer.music.unpause()
+        # Shift GameEnd forward by however long we were paused
+        if PauseStart:
+            GameEnd = GameEnd + (datetime.now() - PauseStart)
+            CurrentGame["ActualEndTime"] = GameEnd
+            PauseStart = None
         GameRunning = "Playing"
         CurrentGame["GameStatus"] = GameRunning
-        SecondsPaused = 0
     WriteGameToDB()
     
 # Stop and clear video 
@@ -1247,7 +1370,10 @@ def StartGame():
     global GreenScores
 
     ResetScore()
-    if APIIitegration: GetOrUpdateGames()
+    if APIIitegration:
+        GetOrUpdateGames()
+        if SyncWithSherwood.game_type_override:
+            _apply_game_type_override(SyncWithSherwood.selected_tournament_number, SyncWithSherwood.game_type_override)
     NextToCurrentGame()
     if APIIitegration: StartMatch(CurrentGame.get("GameNumber"))
     if pygame.mixer.music.get_busy:
@@ -1368,7 +1494,10 @@ def ButtonPressed(channel):
 
         elif channel ==  pygame.K_DOWN: # Pull Data from Sherwood
             if DeBug: print("Pull Data from Sherwood")
-            if APIIitegration: GetOrUpdateGames()
+            if APIIitegration:
+                GetOrUpdateGames()
+                if SyncWithSherwood.game_type_override:
+                    _apply_game_type_override(SyncWithSherwood.selected_tournament_number, SyncWithSherwood.game_type_override)
         #Toggle Controls
         elif channel ==  pygame.K_BACKSPACE: # Toggle Auto Instructions
             if AutoInst:
@@ -1383,12 +1512,15 @@ def ButtonPressed(channel):
             if APIIitegration:
                 APIIitegration = False
                 SyncWithSherwood.selected_tournament_number = None
+                SyncWithSherwood.selected_tournament_name = None
+                SyncWithSherwood.game_type_override = None
                 SpeakIt.put("Tournament integration off")
             else:
                 tournaments = ListTournaments()
                 if tournaments:
                     if len(tournaments) == 1:
                         SyncWithSherwood.selected_tournament_number = tournaments[0]['tournament_number']
+                        SyncWithSherwood.selected_tournament_name = tournaments[0].get('name', '')
                         APIIitegration = True
                         SpeakIt.put("Tournament integration on. " + tournaments[0].get('name', ''))
                         GetOrUpdateGames()
@@ -1596,6 +1728,15 @@ VIDEO_MAP = {
 }
 ALL_VIDEOS = list(VIDEO_MAP.values())
 
+VIDEO_FILE_MAP = {
+    "vCountdown":  "Countdown.mp4",
+    "Elimination": "EliminationInst.mp4",
+    "Normal":      "NormalInst.mp4",
+    "vPromo":      "Promo.mp4",
+    "Sanction":    "SanctionInst.mp4",
+    "vShootInst":  "ShootInst.mp4",
+}
+
 def ShrinkAllVideos():
     for v in ALL_VIDEOS:
         v.resize((1, 1))
@@ -1603,9 +1744,13 @@ def ShrinkAllVideos():
 def PlayAVideo(Video):
     global CurrentVid
     global HoldIt
+    global video_pause_requested, video_stop_requested
     vid = VIDEO_MAP.get(Video)
     if vid is None:
         return
+    # Clear any stale web control requests from before this video
+    video_pause_requested = False
+    video_stop_requested = False
     if pygame.mixer.music.get_busy():
         pygame.mixer.music.fadeout(5000)
     if not vid.active:
@@ -1613,6 +1758,10 @@ def PlayAVideo(Video):
         vid.restart()
         vid.play()
         CurrentVid = "Playing " + Video
+        # Notify web clients to play the matching video
+        video_file = VIDEO_FILE_MAP.get(Video, '')
+        if video_file:
+            web_thread.socketio.emit('video_start', {'file': video_file})
     while vid.active:
         vid.draw(screen, (0, 0))
         pygame.display.update()
@@ -1626,6 +1775,16 @@ def PlayAVideo(Video):
                     if event.key == pygame.K_v:
                         vid.stop()
                         pygame.mixer.Sound.play(Close)
+        # Check web control requests
+        if video_pause_requested:
+            vid.toggle_pause()
+            video_pause_requested = False
+        if video_stop_requested:
+            vid.stop()
+            pygame.mixer.Sound.play(Close)
+            video_stop_requested = False
+    # Notify web clients video ended
+    web_thread.socketio.emit('video_stop', {})
     ShrinkAllVideos()
     CurrentVid = "None"
     DrawScoreBoard()
@@ -1645,6 +1804,7 @@ GetNextGame()
 DrawScoreBoard() 
 
 web_thread = WebGameThread()
+sync_thread = APISyncThread()
 broadcast_tick = 0
 
 while 1:
@@ -1719,12 +1879,8 @@ while 1:
             NormalGameEnd()
     
     elif GameRunning == "Pause":
-        SecondsLeft = int((GameEnd - datetime.now()).total_seconds())
-        if SecondsLeft != SecondsPaused:
-           GameEnd = GameEnd + timedelta(seconds = 1)
-           CurrentGame["ActualEndTime"] = GameEnd
-           SecondsPaused = SecondsLeft + 1
-   
+        DrawScoreBoard()  # SecondsLeft is frozen; GameEnd shifts on unpause
+
     if CurrentVid == "None":        
         DrawScoreBoard()
 

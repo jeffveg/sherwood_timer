@@ -130,6 +130,17 @@ header h1 {
     font-size: 1rem;
 }
 
+.stage-divider {
+    font-size: 0.95rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: rgba(255, 255, 255, 0.7);
+    padding: 12px 4px 4px;
+    margin-top: 8px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+}
+
 .group-divider {
     font-size: 0.8rem;
     font-weight: 700;
@@ -442,6 +453,11 @@ body[data-theme="light"] .game-type-badge {
 body[data-theme="light"] .loading-msg,
 body[data-theme="light"] .no-games-msg {
     color: #999999;
+}
+
+body[data-theme="light"] .stage-divider {
+    color: #333333;
+    border-bottom-color: #cccccc;
 }
 
 body[data-theme="light"] .group-divider {

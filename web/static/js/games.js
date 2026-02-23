@@ -91,9 +91,19 @@ function renderGames() {
 
     var html = '';
     var lastGroup = -1;
+    var lastBracket = '';
+
+    // Bracket type display names
+    var bracketLabels = {
+        'round_robin': 'Round Robin',
+        'winners': 'Winners Bracket',
+        'losers': 'Losers Bracket',
+        'grand_final': 'Grand Final'
+    };
 
     for (var i = 0; i < filtered.length; i++) {
         var g = filtered[i];
+        var bracket = g.bracketType || 'round_robin';
         var isNext = g.gameNumber === nextGameNumber;
         var isFinished = g.gameStatus === 'Finished';
         var isSkipped = g.gameStatus === 'Skipped';
@@ -110,8 +120,15 @@ function renderGames() {
         // Only allow clicking on Not Started games
         var clickAttr = isNotStarted ? ' data-game="' + g.gameNumber + '"' : '';
 
-        // Group divider label
-        if (g.groupNum > 0 && g.groupNum !== lastGroup) {
+        // Stage / bracket divider
+        if (bracket !== lastBracket) {
+            html += '<div class="stage-divider">' + (bracketLabels[bracket] || bracket) + '</div>';
+            lastBracket = bracket;
+            lastGroup = -1;  // reset group tracking for new stage
+        }
+
+        // Group divider label (within round-robin)
+        if (bracket === 'round_robin' && g.groupNum > 0 && g.groupNum !== lastGroup) {
             html += '<div class="group-divider">Group ' + g.groupNum + '</div>';
             lastGroup = g.groupNum;
         }
