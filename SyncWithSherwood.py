@@ -18,6 +18,8 @@ API_KEY = "jawvoj-nikwyV-4zawfu"
 
 # Set when operator picks a tournament from the list
 selected_tournament_number = None
+selected_tournament_name = None
+game_type_override = None
 
 # Track which tournaments have already had their first sync processed
 _first_sync_done = {}

@@ -108,6 +108,12 @@ body {
     animation: blink 1s step-end infinite;
 }
 
+#timer-display.finalizing {
+    color: #f59e0b;
+    font-size: 1.6rem;
+    animation: blink 1.5s step-end infinite;
+}
+
 @keyframes pulse-red {
     0%, 100% { opacity: 1; }
     50% { opacity: 0.5; }
@@ -349,10 +355,6 @@ body {
 .ctrl-btn.cooldown {
     opacity: 0.5;
     pointer-events: none;
-}
-
-.wide-btn {
-    /* spans full width if needed */
 }
 
 .ctrl-label {
@@ -728,6 +730,10 @@ body[data-theme="light"] #timer-display.overtime {
 }
 
 body[data-theme="light"] #timer-display.paused {
+    color: #d97706;
+}
+
+body[data-theme="light"] #timer-display.finalizing {
     color: #d97706;
 }
 
