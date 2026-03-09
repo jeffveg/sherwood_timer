@@ -14,6 +14,7 @@ path = join("SherwoodTimer", os.getcwd())
 database = join(path, 'stdata.db')
 
 API_BASE = "https://app.sherwoodadventure.com/api/scoring.php"
+SMS_API_BASE = "https://app.sherwoodadventure.com/api/sms-notify.php"
 API_KEY = "jawvoj-nikwyV-4zawfu"
 
 # Set when operator picks a tournament from the list
@@ -418,6 +419,121 @@ def UploadScores(GameNum):
     except Exception as error:
         logger.error("UploadScores error: %s", error)
         return 0
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+# ============================================================
+# SMS Notification Functions
+# Called by run.py after games end to notify team captains via
+# the PHP sms-notify.php endpoint, which sends texts via QUO API.
+# ============================================================
+
+def _sms_api_post(action, data):
+    """POST to the SMS notification endpoint (sms-notify.php)."""
+    try:
+        r = requests.post(
+            SMS_API_BASE,
+            params={"action": action, "api_key": API_KEY},
+            json=data,
+            timeout=10
+        )
+        r.raise_for_status()
+        return r.json()
+    except Exception as e:
+        logger.error("SMS API POST %s error: %s", action, e)
+        return {"success": False, "error": str(e)}
+
+
+def NotifyUpcoming(match_id, games_away=2):
+    """
+    Notify team captains about an upcoming match.
+    Called after a game ends — the timer looks ahead in the queue
+    and notifies teams that are N games out.
+
+    Args:
+        match_id:   The AltGameNum (PHP match ID) of the upcoming match
+        games_away: 1 = "on deck / next up", 2+ = "~N games away"
+    """
+    if not selected_tournament_number:
+        return
+
+    result = _sms_api_post("notify_upcoming", {
+        "match_id": int(match_id),
+        "games_away": int(games_away),
+    })
+
+    if result.get("success"):
+        sent = result.get("sent", 0)
+        skipped = result.get("skipped", 0)
+        if sent > 0:
+            logger.info("SMS notify_upcoming: sent=%d skipped=%d match_id=%s games_away=%d",
+                        sent, skipped, match_id, games_away)
+    else:
+        logger.error("SMS notify_upcoming error: %s", result.get("error"))
+
+
+def NotifyScore(match_id):
+    """
+    Notify opted-in captains about a completed match score.
+    Called after UploadScores() succeeds.
+
+    Args:
+        match_id: The AltGameNum (PHP match ID) of the completed match
+    """
+    if not selected_tournament_number:
+        return
+
+    result = _sms_api_post("notify_score", {
+        "match_id": int(match_id),
+    })
+
+    if result.get("success"):
+        sent = result.get("sent", 0)
+        if sent > 0:
+            logger.info("SMS notify_score: sent=%d match_id=%s", sent, match_id)
+    else:
+        logger.error("SMS notify_score error: %s", result.get("error"))
+
+
+def GetUpcomingMatchIds(games_ahead=2):
+    """
+    Look ahead in the local SQLite games queue and return the match IDs
+    for the next N 'Not Started' games. Used to determine which teams
+    to notify about upcoming matches.
+
+    Args:
+        games_ahead: How many games to look ahead (default 2)
+
+    Returns:
+        List of (AltGameNum, position) tuples where position is 1-based
+        (1 = next game / on deck, 2 = two games away, etc.)
+    """
+    conn = None
+    try:
+        conn = sqlite3.connect(database)
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT AltGameNum FROM Games"
+            " WHERE GameStatus = 'Not Started'"
+            " AND AltGameNum IS NOT NULL AND AltGameNum != '0'"
+            " AND AltTournmentNum = ?"
+            " ORDER BY " + GAME_SORT_SQL
+            + " LIMIT ?;",
+            (selected_tournament_number, games_ahead)
+        )
+        rows = cur.fetchall()
+        result = []
+        for i, row in enumerate(rows):
+            result.append((row[0], i + 1))  # (match_id, position: 1-based)
+        return result
+    except Exception as error:
+        logger.error("GetUpcomingMatchIds error: %s", error)
+        return []
     finally:
         if conn:
             try:

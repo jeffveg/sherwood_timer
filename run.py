@@ -76,6 +76,8 @@ BackgroundVol    = .25
 OutdoorMode      = False
 AutoInst         = False 
 APIIitegration   = False
+SmsNotificationsEnabled = True   # Master toggle for SMS text notifications
+SmsLeadGames = 2                 # Number of games ahead to notify captains (configurable 1-5)
 AnnouncedOvertime = False
 # Video control flags — set by the web socketio thread, read by the
 # pygame main thread inside PlayAVideo().  Simple boolean assignments
@@ -508,7 +510,7 @@ class WebGameThread(threading.Thread):
 
         @self.socketio.on('admin_update')
         def handle_admin_update(data):
-            global ScoreValues, SongList, DefaultGameRunTime, SanctionGameRunTime, GameRunTime, OutdoorMode
+            global ScoreValues, SongList, DefaultGameRunTime, SanctionGameRunTime, GameRunTime, OutdoorMode, SmsNotificationsEnabled, SmsLeadGames
             setting = data.get('setting', '')
             value = data.get('value')
             success = False
@@ -551,6 +553,14 @@ class WebGameThread(threading.Thread):
                 elif setting == 'outdoorMode':
                     OutdoorMode = bool(value)
                     success = True
+                elif setting == 'smsNotifications':
+                    SmsNotificationsEnabled = bool(value)
+                    success = True
+                elif setting == 'smsLeadGames':
+                    val = int(value)
+                    if 1 <= val <= 5:
+                        SmsLeadGames = val
+                        success = True
             except (ValueError, TypeError):
                 success = False
             emit('admin_ack', {'setting': setting, 'success': success})
@@ -605,6 +615,8 @@ class WebGameThread(threading.Thread):
             'songListOptions': sorted([d for d in os.listdir(join(path, 'SongList'))
                                        if os.path.isdir(join(path, 'SongList', d))]),
             'outdoorMode': OutdoorMode,
+            'smsNotificationsEnabled': SmsNotificationsEnabled,
+            'smsLeadGames': SmsLeadGames,
             'songTitle': SongData.title if SongData else '',
             'songArtist': SongData.artist if SongData else '',
             'musicPlaying': pygame.mixer.music.get_busy(),
@@ -1257,10 +1269,49 @@ def NormalGameEnd():
         if result != 1:
             # Connection failed — queue for retry by the sync thread
             QueueUpload(gameNum)
+        else:
+            # Score uploaded successfully — send score notification via SMS
+            if SmsNotificationsEnabled:
+                matchId = CurrentGame.get("AltGameNum")
+                if matchId:
+                    threading.Thread(
+                        target=SyncWithSherwood.NotifyScore,
+                        args=(matchId,),
+                        daemon=True
+                    ).start()
+
         GetOrUpdateGames()
         if SyncWithSherwood.game_type_override:
             _apply_game_type_override(SyncWithSherwood.selected_tournament_number, SyncWithSherwood.game_type_override)
+
+        # SMS: Notify teams about upcoming games
+        if SmsNotificationsEnabled:
+            _send_upcoming_notifications()
+
     GetNextGame()
+
+def _send_upcoming_notifications():
+    """
+    After a game ends and the queue advances, look ahead at the next N
+    'Not Started' games and notify their team captains via SMS.
+    Game at position 1 = "on deck" (games_away=1)
+    Game at position 2+ = "~N games away" (games_away=N)
+
+    Uses SmsLeadGames global (configurable from admin UI, default 2).
+    Runs each notification in a background daemon thread to avoid
+    blocking the main game loop.
+    """
+    try:
+        upcoming = SyncWithSherwood.GetUpcomingMatchIds(games_ahead=SmsLeadGames)
+        for match_id, position in upcoming:
+            threading.Thread(
+                target=SyncWithSherwood.NotifyUpcoming,
+                args=(match_id, position),
+                daemon=True
+            ).start()
+    except Exception as error:
+        logger.error("_send_upcoming_notifications error: %s", error)
+
 
 # Reset the scores
 def ResetScore():

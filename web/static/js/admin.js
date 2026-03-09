@@ -18,6 +18,8 @@
         songListSelect:  document.getElementById('songlist-select'),
         defaultRunTime:  document.getElementById('val-defaultRunTime'),
         sanctionRunTime: document.getElementById('val-sanctionRunTime'),
+        smsLeadGames:    document.getElementById('val-smsLeadGames'),
+        smsSwitch:       document.getElementById('sms-switch'),
         connectionStatus: document.getElementById('connection-status'),
     };
 
@@ -30,6 +32,7 @@
         scoreExtra: 1,
         defaultRunTime: 5,
         sanctionRunTime: 8,
+        smsLeadGames: 2,
     };
 
     // ---- Connection status ----
@@ -83,6 +86,14 @@
         });
     }
 
+    // ---- SMS toggle ----
+    var smsSwitch = document.getElementById('sms-switch');
+    if (smsSwitch) {
+        smsSwitch.addEventListener('change', function () {
+            socket.emit('admin_update', { setting: 'smsNotifications', value: smsSwitch.checked });
+        });
+    }
+
     // ---- Update display from state ----
     function updateDisplay(state) {
         // Score values
@@ -133,6 +144,15 @@
             els.sanctionRunTime.textContent = currentValues.sanctionRunTime;
         }
 
+        // SMS notifications
+        if (state.smsNotificationsEnabled !== undefined && els.smsSwitch) {
+            els.smsSwitch.checked = !!state.smsNotificationsEnabled;
+        }
+        if (state.smsLeadGames !== undefined && els.smsLeadGames) {
+            currentValues.smsLeadGames = state.smsLeadGames;
+            els.smsLeadGames.textContent = currentValues.smsLeadGames;
+        }
+
         // Theme
         applyTheme(!!state.outdoorMode);
     }
@@ -159,6 +179,11 @@
         // Timer values must be positive integers
         if ((setting === 'defaultRunTime' || setting === 'sanctionRunTime') && newVal < 1) {
             return; // Don't allow zero or negative
+        }
+
+        // SMS lead games: clamp to 1-5
+        if (setting === 'smsLeadGames' && (newVal < 1 || newVal > 5)) {
+            return;
         }
 
         // Optimistically update display

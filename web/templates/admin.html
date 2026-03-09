@@ -109,6 +109,29 @@
                 </div>
             </div>
         </section>
+
+        <!-- SMS Notifications Section -->
+        <section class="settings-section">
+            <h2>SMS Notifications</h2>
+            <div class="setting-row">
+                <label>Text Notifications</label>
+                <label class="theme-toggle" for="sms-switch">
+                    <span class="toggle-label-dark">Off</span>
+                    <input type="checkbox" id="sms-switch">
+                    <span class="toggle-slider"></span>
+                    <span class="toggle-label-light">On</span>
+                </label>
+            </div>
+            <div class="setting-row">
+                <label>Games Lead Time</label>
+                <div class="stepper">
+                    <button class="step-btn step-down" data-setting="smsLeadGames" data-dir="down">−</button>
+                    <span class="step-value" id="val-smsLeadGames">2</span>
+                    <button class="step-btn step-up" data-setting="smsLeadGames" data-dir="up">+</button>
+                </div>
+            </div>
+            <p class="hint">Notify captains N games before their match. Requires SMS to be enabled on the tournament website.</p>
+        </section>
     </div>
 
     <script src="/static/js/socket.io.min.js"></script>
