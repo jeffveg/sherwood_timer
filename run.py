@@ -76,7 +76,7 @@ BackgroundVol    = .25
 OutdoorMode      = False
 AutoInst         = False 
 APIIitegration   = False
-SmsNotificationsEnabled = True   # Master toggle for SMS text notifications
+SmsNotificationsEnabled = False  # Master toggle for SMS text notifications (operator enables via admin UI)
 SmsLeadGames = 2                 # Number of games ahead to notify captains (configurable 1-5)
 AnnouncedOvertime = False
 # Video control flags — set by the web socketio thread, read by the
